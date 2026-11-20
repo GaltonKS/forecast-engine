@@ -5,6 +5,9 @@ business's monthly financials, it fits growth and margin drivers, and it returns
 projections with every assumption and formula included. The math is
 deterministic. A future LLM layer will only turn prompts into driver overrides.
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the target architecture,
+build order, and what's still missing.
+
 ```
 engine/            the math (step 1)
   schema.py        Pydantic contracts: line items, drivers, overrides, forecast response

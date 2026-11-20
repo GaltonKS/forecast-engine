@@ -75,6 +75,7 @@ class ForecastSummary(BaseModel):
     horizon_months: int
     last_actual: date
     overrides: dict
+    methods: dict[str, str] = {}  # line -> model used, e.g. {"revenue": "ets"}
 
 
 # ---------- app factory ----------
@@ -250,8 +251,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tenant: Tenant = Depends(get_tenant),
         db: Session = Depends(get_db),
     ):
-        """Run a forecast. Send overrides to model a scenario, e.g.
-        {"horizon_months": 12, "overrides": {"revenue_growth": 0.02}}"""
+        """Run a forecast. By default each line's model is picked by backtest
+        (see `models` in the response). Send overrides to model a scenario, e.g.
+        {"horizon_months": 12, "overrides": {"revenue_growth": 0.02}}, or force a
+        model with {"method": "ets"}."""
         monthly = load_monthly(db, tenant.id)
         try:
             resp = run_forecast(monthly, body)
@@ -289,6 +292,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 horizon_months=f.horizon_months,
                 last_actual=f.last_actual,
                 overrides=f.overrides,
+                methods={k: v.get("method", "") for k, v in (f.result.get("models") or {}).items()},
             )
             for f in rows
         ]

@@ -1,0 +1,193 @@
+period,account,category,amount
+2024-01-01,Subscription revenue,revenue,79154.4
+2024-01-01,Services revenue,revenue,13952.55
+2024-01-01,Hosting,cogs,14169.05
+2024-01-01,Payment processing,cogs,2728.17
+2024-01-01,Salaries,opex,55039.47
+2024-01-01,Rent,opex,6000.0
+2024-01-01,Marketing,opex,10408.8
+2024-01-01,Interest income,other,400.3
+2024-02-01,Subscription revenue,revenue,80502.28
+2024-02-01,Services revenue,revenue,14948.95
+2024-02-01,Hosting,cogs,13923.79
+2024-02-01,Payment processing,cogs,2821.37
+2024-02-01,Salaries,opex,55740.73
+2024-02-01,Rent,opex,6000.0
+2024-02-01,Marketing,opex,10858.6
+2024-02-01,Interest income,other,388.93
+2024-03-01,Subscription revenue,revenue,86353.25
+2024-03-01,Services revenue,revenue,16671.62
+2024-03-01,Hosting,cogs,14944.21
+2024-03-01,Payment processing,cogs,2969.33
+2024-03-01,Salaries,opex,57202.09
+2024-03-01,Rent,opex,6000.0
+2024-03-01,Marketing,opex,13827.42
+2024-03-01,Interest income,other,391.58
+2024-04-01,Subscription revenue,revenue,86804.21
+2024-04-01,Services revenue,revenue,14273.15
+2024-04-01,Hosting,cogs,15063.79
+2024-04-01,Payment processing,cogs,3144.99
+2024-04-01,Salaries,opex,57145.07
+2024-04-01,Rent,opex,6000.0
+2024-04-01,Marketing,opex,13265.19
+2024-04-01,Interest income,other,394.9
+2024-05-01,Subscription revenue,revenue,92064.82
+2024-05-01,Services revenue,revenue,14244.17
+2024-05-01,Hosting,cogs,15201.97
+2024-05-01,Payment processing,cogs,3132.05
+2024-05-01,Salaries,opex,58585.61
+2024-05-01,Rent,opex,6000.0
+2024-05-01,Marketing,opex,12264.96
+2024-05-01,Interest income,other,403.42
+2024-06-01,Subscription revenue,revenue,94748.01
+2024-06-01,Services revenue,revenue,15133.81
+2024-06-01,Hosting,cogs,16612.06
+2024-06-01,Payment processing,cogs,3332.84
+2024-06-01,Salaries,opex,58947.37
+2024-06-01,Rent,opex,6000.0
+2024-06-01,Marketing,opex,13349.12
+2024-06-01,Interest income,other,415.01
+2024-07-01,Subscription revenue,revenue,99694.25
+2024-07-01,Services revenue,revenue,15247.48
+2024-07-01,Hosting,cogs,17358.89
+2024-07-01,Payment processing,cogs,3324.24
+2024-07-01,Salaries,opex,60040.9
+2024-07-01,Rent,opex,6000.0
+2024-07-01,Marketing,opex,12103.03
+2024-07-01,Interest income,other,399.56
+2024-08-01,Subscription revenue,revenue,98968.31
+2024-08-01,Services revenue,revenue,16623.08
+2024-08-01,Hosting,cogs,17582.67
+2024-08-01,Payment processing,cogs,3529.87
+2024-08-01,Salaries,opex,61499.86
+2024-08-01,Rent,opex,6000.0
+2024-08-01,Marketing,opex,14591.83
+2024-08-01,Interest income,other,403.77
+2024-09-01,Subscription revenue,revenue,105849.72
+2024-09-01,Services revenue,revenue,16100.58
+2024-09-01,Hosting,cogs,18217.12
+2024-09-01,Payment processing,cogs,3727.31
+2024-09-01,Salaries,opex,61925.0
+2024-09-01,Rent,opex,6000.0
+2024-09-01,Marketing,opex,12206.83
+2024-09-01,Interest income,other,408.06
+2024-10-01,Subscription revenue,revenue,109994.29
+2024-10-01,Services revenue,revenue,18023.15
+2024-10-01,Hosting,cogs,18737.27
+2024-10-01,Payment processing,cogs,3701.79
+2024-10-01,Salaries,opex,62742.81
+2024-10-01,Rent,opex,6000.0
+2024-10-01,Marketing,opex,12287.02
+2024-10-01,Interest income,other,398.47
+2024-11-01,Subscription revenue,revenue,110600.3
+2024-11-01,Services revenue,revenue,15300.44
+2024-11-01,Hosting,cogs,18150.97
+2024-11-01,Payment processing,cogs,3936.36
+2024-11-01,Salaries,opex,63356.56
+2024-11-01,Rent,opex,6000.0
+2024-11-01,Marketing,opex,14149.38
+2024-11-01,Interest income,other,414.86
+2024-12-01,Subscription revenue,revenue,113858.35
+2024-12-01,Services revenue,revenue,16564.96
+2024-12-01,Hosting,cogs,19455.92
+2024-12-01,Payment processing,cogs,4093.91
+2024-12-01,Salaries,opex,65200.9
+2024-12-01,Rent,opex,6000.0
+2024-12-01,Marketing,opex,13928.67
+2024-12-01,Interest income,other,396.61
+2025-01-01,Subscription revenue,revenue,119861.14
+2025-01-01,Services revenue,revenue,18201.13
+2025-01-01,Hosting,cogs,20691.58
+2025-01-01,Payment processing,cogs,4047.33
+2025-01-01,Salaries,opex,65333.17
+2025-01-01,Rent,opex,6000.0
+2025-01-01,Marketing,opex,14001.4
+2025-01-01,Interest income,other,399.4
+2025-02-01,Subscription revenue,revenue,125785.53
+2025-02-01,Services revenue,revenue,16261.35
+2025-02-01,Hosting,cogs,19743.83
+2025-02-01,Payment processing,cogs,4249.57
+2025-02-01,Salaries,opex,66570.85
+2025-02-01,Rent,opex,6000.0
+2025-02-01,Marketing,opex,17633.35
+2025-02-01,Interest income,other,407.62
+2025-03-01,Subscription revenue,revenue,129615.93
+2025-03-01,Services revenue,revenue,17647.62
+2025-03-01,Hosting,cogs,21474.76
+2025-03-01,Payment processing,cogs,4293.21
+2025-03-01,Salaries,opex,68287.9
+2025-03-01,Rent,opex,6000.0
+2025-03-01,Marketing,opex,17612.73
+2025-03-01,Interest income,other,411.91
+2025-04-01,Subscription revenue,revenue,133162.45
+2025-04-01,Services revenue,revenue,17062.69
+2025-04-01,Hosting,cogs,21119.75
+2025-04-01,Payment processing,cogs,4593.55
+2025-04-01,Salaries,opex,68160.74
+2025-04-01,Rent,opex,6000.0
+2025-04-01,Marketing,opex,14739.34
+2025-04-01,Interest income,other,386.49
+2025-05-01,Subscription revenue,revenue,137387.63
+2025-05-01,Services revenue,revenue,16014.76
+2025-05-01,Hosting,cogs,21567.67
+2025-05-01,Payment processing,cogs,4608.71
+2025-05-01,Salaries,opex,69237.9
+2025-05-01,Rent,opex,6000.0
+2025-05-01,Marketing,opex,14128.44
+2025-05-01,Interest income,other,414.97
+2025-06-01,Subscription revenue,revenue,144556.68
+2025-06-01,Services revenue,revenue,16515.9
+2025-06-01,Hosting,cogs,22681.25
+2025-06-01,Payment processing,cogs,4818.02
+2025-06-01,Salaries,opex,70648.66
+2025-06-01,Rent,opex,6000.0
+2025-06-01,Marketing,opex,18561.84
+2025-06-01,Interest income,other,419.72
+2025-07-01,Subscription revenue,revenue,148295.9
+2025-07-01,Services revenue,revenue,17884.2
+2025-07-01,Hosting,cogs,23044.46
+2025-07-01,Payment processing,cogs,4903.11
+2025-07-01,Salaries,opex,71677.43
+2025-07-01,Rent,opex,6000.0
+2025-07-01,Marketing,opex,18829.83
+2025-07-01,Interest income,other,386.46
+2025-08-01,Subscription revenue,revenue,149399.23
+2025-08-01,Services revenue,revenue,19756.15
+2025-08-01,Hosting,cogs,24604.58
+2025-08-01,Payment processing,cogs,5078.74
+2025-08-01,Salaries,opex,73045.31
+2025-08-01,Rent,opex,6000.0
+2025-08-01,Marketing,opex,17629.15
+2025-08-01,Interest income,other,419.14
+2025-09-01,Subscription revenue,revenue,162653.22
+2025-09-01,Services revenue,revenue,19021.04
+2025-09-01,Hosting,cogs,24802.33
+2025-09-01,Payment processing,cogs,5317.13
+2025-09-01,Salaries,opex,73583.73
+2025-09-01,Rent,opex,6000.0
+2025-09-01,Marketing,opex,18005.72
+2025-09-01,Interest income,other,411.16
+2025-10-01,Subscription revenue,revenue,163070.71
+2025-10-01,Services revenue,revenue,17461.92
+2025-10-01,Hosting,cogs,26693.17
+2025-10-01,Payment processing,cogs,5697.97
+2025-10-01,Salaries,opex,75718.45
+2025-10-01,Rent,opex,6000.0
+2025-10-01,Marketing,opex,19924.95
+2025-10-01,Interest income,other,409.59
+2025-11-01,Subscription revenue,revenue,167725.13
+2025-11-01,Services revenue,revenue,18736.6
+2025-11-01,Hosting,cogs,26515.48
+2025-11-01,Payment processing,cogs,5557.95
+2025-11-01,Salaries,opex,75595.48
+2025-11-01,Rent,opex,6000.0
+2025-11-01,Marketing,opex,17211.43
+2025-11-01,Interest income,other,407.7
+2025-12-01,Subscription revenue,revenue,181323.36
+2025-12-01,Services revenue,revenue,18658.42
+2025-12-01,Hosting,cogs,28596.21
+2025-12-01,Payment processing,cogs,6081.35
+2025-12-01,Salaries,opex,78165.64
+2025-12-01,Rent,opex,6000.0
+2025-12-01,Marketing,opex,17335.9
+2025-12-01,Interest income,other,389.07

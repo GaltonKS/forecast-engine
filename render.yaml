@@ -1,0 +1,23 @@
+databases:
+  - name: forecast-db
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: forecast-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forecast-db
+          property: connectionString
+      - key: API_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false # your frontend's URL(s), comma-separated

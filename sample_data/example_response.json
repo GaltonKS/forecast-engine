@@ -1,0 +1,168 @@
+{
+  "engine_version": "0.1.0",
+  "last_actual_period": "2025-12-01",
+  "history_months": 24,
+  "drivers": {
+    "revenue_base": {
+      "value": 188992.04666666663,
+      "method": "Average revenue of the last 3 months",
+      "overridden": false
+    },
+    "revenue_growth": {
+      "value": 0.02,
+      "method": "Scenario override",
+      "overridden": true
+    },
+    "gross_margin": {
+      "value": 0.8275877172865019,
+      "method": "(revenue - cogs) / revenue over the last 6 months",
+      "overridden": false
+    },
+    "opex_base": {
+      "value": 100650.61666666665,
+      "method": "Average opex of the last 3 months",
+      "overridden": false
+    },
+    "opex_growth": {
+      "value": 0.0,
+      "method": "Scenario override",
+      "overridden": true
+    },
+    "other_net": {
+      "value": 403.8533333333333,
+      "method": "Average net other income of the last 6 months",
+      "overridden": false
+    }
+  },
+  "formulas": {
+    "revenue": "revenue[t] = revenue_base * (1 + revenue_growth) ^ t",
+    "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
+    "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
+    "opex": "opex[t] = opex_base * (1 + opex_growth) ^ t",
+    "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
+    "net_income": "net_income[t] = operating_income[t] + other_net"
+  },
+  "months": [
+    {
+      "period": "2026-01-01",
+      "revenue": 192771.89,
+      "cogs": 33236.24,
+      "gross_profit": 159535.65,
+      "opex": 100650.62,
+      "operating_income": 58885.03,
+      "other_net": 403.85,
+      "net_income": 59288.88
+    },
+    {
+      "period": "2026-02-01",
+      "revenue": 196627.33,
+      "cogs": 33900.97,
+      "gross_profit": 162726.36,
+      "opex": 100650.62,
+      "operating_income": 62075.74,
+      "other_net": 403.85,
+      "net_income": 62479.6
+    },
+    {
+      "period": "2026-03-01",
+      "revenue": 200559.87,
+      "cogs": 34578.99,
+      "gross_profit": 165980.89,
+      "opex": 100650.62,
+      "operating_income": 65330.27,
+      "other_net": 403.85,
+      "net_income": 65734.12
+    },
+    {
+      "period": "2026-04-01",
+      "revenue": 204571.07,
+      "cogs": 35270.57,
+      "gross_profit": 169300.5,
+      "opex": 100650.62,
+      "operating_income": 68649.89,
+      "other_net": 403.85,
+      "net_income": 69053.74
+    },
+    {
+      "period": "2026-05-01",
+      "revenue": 208662.49,
+      "cogs": 35975.98,
+      "gross_profit": 172686.51,
+      "opex": 100650.62,
+      "operating_income": 72035.9,
+      "other_net": 403.85,
+      "net_income": 72439.75
+    },
+    {
+      "period": "2026-06-01",
+      "revenue": 212835.74,
+      "cogs": 36695.5,
+      "gross_profit": 176140.24,
+      "opex": 100650.62,
+      "operating_income": 75489.63,
+      "other_net": 403.85,
+      "net_income": 75893.48
+    },
+    {
+      "period": "2026-07-01",
+      "revenue": 217092.46,
+      "cogs": 37429.41,
+      "gross_profit": 179663.05,
+      "opex": 100650.62,
+      "operating_income": 79012.43,
+      "other_net": 403.85,
+      "net_income": 79416.29
+    },
+    {
+      "period": "2026-08-01",
+      "revenue": 221434.3,
+      "cogs": 38177.99,
+      "gross_profit": 183256.31,
+      "opex": 100650.62,
+      "operating_income": 82605.69,
+      "other_net": 403.85,
+      "net_income": 83009.55
+    },
+    {
+      "period": "2026-09-01",
+      "revenue": 225862.99,
+      "cogs": 38941.55,
+      "gross_profit": 186921.44,
+      "opex": 100650.62,
+      "operating_income": 86270.82,
+      "other_net": 403.85,
+      "net_income": 86674.67
+    },
+    {
+      "period": "2026-10-01",
+      "revenue": 230380.25,
+      "cogs": 39720.38,
+      "gross_profit": 190659.87,
+      "opex": 100650.62,
+      "operating_income": 90009.25,
+      "other_net": 403.85,
+      "net_income": 90413.1
+    },
+    {
+      "period": "2026-11-01",
+      "revenue": 234987.86,
+      "cogs": 40514.79,
+      "gross_profit": 194473.06,
+      "opex": 100650.62,
+      "operating_income": 93822.45,
+      "other_net": 403.85,
+      "net_income": 94226.3
+    },
+    {
+      "period": "2026-12-01",
+      "revenue": 239687.61,
+      "cogs": 41325.09,
+      "gross_profit": 198362.52,
+      "opex": 100650.62,
+      "operating_income": 97711.91,
+      "other_net": 403.85,
+      "net_income": 98115.76
+    }
+  ],
+  "warnings": []
+}

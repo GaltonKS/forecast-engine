@@ -17,7 +17,40 @@ services:
         fromDatabase:
           name: forecast-db
           property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: forecast-queue
+          property: connectionString
       - key: API_KEY
         generateValue: true
       - key: CORS_ORIGINS
         sync: false # your frontend's URL(s), comma-separated
+
+  # Runs forecast and scenario jobs from the queue. Plan left at Render's
+  # default worker size (0.5 CPU / 512 MB); one job at a time.
+  - type: worker
+    name: forecast-worker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.worker worker --concurrency 1 --loglevel INFO
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forecast-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: forecast-queue
+          property: connectionString
+
+  # Valkey job queue. noeviction: a full queue rejects new jobs rather than
+  # silently dropping queued ones. Paid plans persist to disk; the free plan
+  # does not, so queued jobs would be lost on restart.
+  - type: keyvalue
+    name: forecast-queue
+    ipAllowList: [] # private network only
+    maxmemoryPolicy: noeviction

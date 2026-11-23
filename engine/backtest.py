@@ -38,6 +38,8 @@ class BacktestResult:
     origins: list[pd.Timestamp]
     scores: list[Score]
     holdouts: dict[str, list[tuple[pd.Timestamp, float, float]]] = field(default_factory=dict)
+    # every fold's predictions per model: (origin position, predicted values)
+    fold_preds: dict[str, list[tuple[int, np.ndarray]]] = field(default_factory=dict)
     note: str | None = None
 
     def best(self, prefer_order: list[str]) -> str | None:
@@ -70,13 +72,13 @@ def backtest(y: pd.Series, methods: list[str], seasonal: bool | None = None) -> 
             note=f"Backtesting needs at least {MIN_TRAIN + 3} months of history, have {n}",
         )
 
-    scores, holdouts = [], {}
+    scores, holdouts, fold_preds = [], {}, {}
     for name in methods:
         spec = MODELS[name]
         if origins[0] < spec.min_train:
             scores.append(Score(name, "skipped", note=f"needs {spec.min_train} months before the first origin"))
             continue
-        errors, actuals, last_fold = [], [], []
+        errors, actuals, last_fold, preds = [], [], [], []
         try:
             for o in origins:
                 train, test = y.iloc[:o], y.iloc[o:o + horizon]
@@ -86,6 +88,7 @@ def backtest(y: pd.Series, methods: list[str], seasonal: bool | None = None) -> 
                 errors.append(pred - test.to_numpy(dtype=float))
                 actuals.append(test.to_numpy(dtype=float))
                 last_fold = list(zip(test.index, test.to_numpy(dtype=float), pred))
+                preds.append((o, np.asarray(pred, dtype=float)))
         except Exception as e:  # a model that can't fit this series just drops out
             scores.append(Score(name, "failed", note=f"{e.__class__.__name__}: {e}"[:200]))
             continue
@@ -96,5 +99,6 @@ def backtest(y: pd.Series, methods: list[str], seasonal: bool | None = None) -> 
             continue
         scores.append(Score(name, "ok", float(np.abs(err).sum() / denom), float(err.sum() / denom), len(origins)))
         holdouts[name] = last_fold
+        fold_preds[name] = preds
 
-    return BacktestResult(horizon, [y.index[o] for o in origins], scores, holdouts)
+    return BacktestResult(horizon, [y.index[o] for o in origins], scores, holdouts, fold_preds)

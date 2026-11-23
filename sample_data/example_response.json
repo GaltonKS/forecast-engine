@@ -1,5 +1,5 @@
 {
-  "engine_version": "0.2.0",
+  "engine_version": "0.3.0",
   "last_actual_period": "2025-12-01",
   "history_months": 24,
   "drivers": {
@@ -40,7 +40,8 @@
     "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
     "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
     "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-    "net_income": "net_income[t] = operating_income[t] + other_net"
+    "net_income": "net_income[t] = operating_income[t] + other_net + adjustments",
+    "adjustments": "Each adjustment adds (currency/month) or scales (pct) its line from start through end"
   },
   "months": [
     {
@@ -68,100 +69,100 @@
       "revenue": 206977.57,
       "cogs": 35685.48,
       "gross_profit": 171292.1,
-      "opex": 102129.4,
-      "operating_income": 69162.69,
+      "opex": 132129.4,
+      "operating_income": 39162.69,
       "other_net": 403.85,
-      "net_income": 69566.54
+      "net_income": 39566.54
     },
     {
       "period": "2026-04-01",
       "revenue": 211117.12,
       "cogs": 36399.19,
       "gross_profit": 174717.94,
-      "opex": 102129.4,
-      "operating_income": 72588.53,
+      "opex": 132129.4,
+      "operating_income": 42588.53,
       "other_net": 403.85,
-      "net_income": 72992.39
+      "net_income": 42992.39
     },
     {
       "period": "2026-05-01",
       "revenue": 215339.47,
       "cogs": 37127.17,
       "gross_profit": 178212.3,
-      "opex": 102129.4,
-      "operating_income": 76082.89,
+      "opex": 132129.4,
+      "operating_income": 46082.89,
       "other_net": 403.85,
-      "net_income": 76486.75
+      "net_income": 46486.75
     },
     {
       "period": "2026-06-01",
       "revenue": 219646.25,
       "cogs": 37869.71,
       "gross_profit": 181776.54,
-      "opex": 102129.4,
-      "operating_income": 79647.14,
+      "opex": 132129.4,
+      "operating_income": 49647.14,
       "other_net": 403.85,
-      "net_income": 80050.99
+      "net_income": 50050.99
     },
     {
       "period": "2026-07-01",
       "revenue": 224039.18,
       "cogs": 38627.11,
       "gross_profit": 185412.07,
-      "opex": 102129.4,
-      "operating_income": 83282.67,
+      "opex": 132129.4,
+      "operating_income": 53282.67,
       "other_net": 403.85,
-      "net_income": 83686.52
+      "net_income": 53686.52
     },
     {
       "period": "2026-08-01",
       "revenue": 228519.96,
       "cogs": 39399.65,
       "gross_profit": 189120.31,
-      "opex": 102129.4,
-      "operating_income": 86990.91,
+      "opex": 132129.4,
+      "operating_income": 56990.91,
       "other_net": 403.85,
-      "net_income": 87394.76
+      "net_income": 57394.76
     },
     {
       "period": "2026-09-01",
       "revenue": 233090.36,
       "cogs": 40187.64,
       "gross_profit": 192902.72,
-      "opex": 102129.4,
-      "operating_income": 90773.32,
+      "opex": 132129.4,
+      "operating_income": 60773.32,
       "other_net": 403.85,
-      "net_income": 91177.17
+      "net_income": 61177.17
     },
     {
       "period": "2026-10-01",
       "revenue": 237752.17,
       "cogs": 40991.39,
       "gross_profit": 196760.78,
-      "opex": 102129.4,
-      "operating_income": 94631.37,
+      "opex": 132129.4,
+      "operating_income": 64631.37,
       "other_net": 403.85,
-      "net_income": 95035.22
+      "net_income": 65035.22
     },
     {
       "period": "2026-11-01",
       "revenue": 242507.21,
       "cogs": 41811.22,
       "gross_profit": 200695.99,
-      "opex": 102129.4,
-      "operating_income": 98566.59,
+      "opex": 132129.4,
+      "operating_income": 68566.59,
       "other_net": 403.85,
-      "net_income": 98970.44
+      "net_income": 68970.44
     },
     {
       "period": "2026-12-01",
       "revenue": 247357.36,
       "cogs": 42647.45,
       "gross_profit": 204709.91,
-      "opex": 102129.4,
-      "operating_income": 102580.51,
+      "opex": 132129.4,
+      "operating_income": 72580.51,
       "other_net": 403.85,
-      "net_income": 102984.36
+      "net_income": 72984.36
     }
   ],
   "models": {
@@ -199,6 +200,357 @@
       "scores": [],
       "holdout": []
     }
+  },
+  "adjustments": [
+    {
+      "line": "opex",
+      "kind": "add",
+      "value": 30000.0,
+      "start": "2026-03-01",
+      "end": null,
+      "label": "Hire 2 engineers"
+    }
+  ],
+  "uncertainty": {
+    "simulations": 1000,
+    "seed": 0,
+    "months": [
+      {
+        "period": "2026-01-01",
+        "revenue": {
+          "p10": 194585.94,
+          "p50": 198885.94,
+          "p90": 203177.42
+        },
+        "gross_profit": {
+          "p10": 160538.05,
+          "p50": 164586.18,
+          "p90": 168401.11
+        },
+        "opex": {
+          "p10": 98158.09,
+          "p50": 102216.37,
+          "p90": 106645.41
+        },
+        "net_income": {
+          "p10": 56864.4,
+          "p50": 62702.76,
+          "p90": 68192.55
+        }
+      },
+      {
+        "period": "2026-02-01",
+        "revenue": {
+          "p10": 198349.29,
+          "p50": 202750.6,
+          "p90": 207263.85
+        },
+        "gross_profit": {
+          "p10": 163785.27,
+          "p50": 167955.81,
+          "p90": 171909.29
+        },
+        "opex": {
+          "p10": 97755.26,
+          "p50": 102285.39,
+          "p90": 106600.04
+        },
+        "net_income": {
+          "p10": 59814.33,
+          "p50": 65998.36,
+          "p90": 71892.14
+        }
+      },
+      {
+        "period": "2026-03-01",
+        "revenue": {
+          "p10": 202460.43,
+          "p50": 206808.03,
+          "p90": 211302.03
+        },
+        "gross_profit": {
+          "p10": 167310.76,
+          "p50": 171304.33,
+          "p90": 175334.87
+        },
+        "opex": {
+          "p10": 127844.38,
+          "p50": 132124.12,
+          "p90": 136572.38
+        },
+        "net_income": {
+          "p10": 33804.98,
+          "p50": 39400.24,
+          "p90": 45425.35
+        }
+      },
+      {
+        "period": "2026-04-01",
+        "revenue": {
+          "p10": 206571.26,
+          "p50": 211062.66,
+          "p90": 215433.12
+        },
+        "gross_profit": {
+          "p10": 170633.07,
+          "p50": 174720.33,
+          "p90": 178691.29
+        },
+        "opex": {
+          "p10": 127603.01,
+          "p50": 132060.85,
+          "p90": 136696.45
+        },
+        "net_income": {
+          "p10": 36429.49,
+          "p50": 43043.13,
+          "p90": 49087.01
+        }
+      },
+      {
+        "period": "2026-05-01",
+        "revenue": {
+          "p10": 210859.63,
+          "p50": 215503.89,
+          "p90": 220083.17
+        },
+        "gross_profit": {
+          "p10": 174250.49,
+          "p50": 178333.6,
+          "p90": 182467.29
+        },
+        "opex": {
+          "p10": 127820.08,
+          "p50": 132161.33,
+          "p90": 136671.71
+        },
+        "net_income": {
+          "p10": 40448.43,
+          "p50": 46662.36,
+          "p90": 52580.2
+        }
+      },
+      {
+        "period": "2026-06-01",
+        "revenue": {
+          "p10": 214814.35,
+          "p50": 219630.58,
+          "p90": 224495.05
+        },
+        "gross_profit": {
+          "p10": 177472.66,
+          "p50": 181721.01,
+          "p90": 186082.94
+        },
+        "opex": {
+          "p10": 128000.27,
+          "p50": 132357.44,
+          "p90": 136523.33
+        },
+        "net_income": {
+          "p10": 43650.82,
+          "p50": 49743.66,
+          "p90": 55910.12
+        }
+      },
+      {
+        "period": "2026-07-01",
+        "revenue": {
+          "p10": 219220.68,
+          "p50": 223883.94,
+          "p90": 229157.1
+        },
+        "gross_profit": {
+          "p10": 180943.32,
+          "p50": 185472.57,
+          "p90": 189849.82
+        },
+        "opex": {
+          "p10": 127895.35,
+          "p50": 132383.57,
+          "p90": 136736.65
+        },
+        "net_income": {
+          "p10": 47167.67,
+          "p50": 53492.42,
+          "p90": 59596.97
+        }
+      },
+      {
+        "period": "2026-08-01",
+        "revenue": {
+          "p10": 223359.35,
+          "p50": 228284.72,
+          "p90": 233393.13
+        },
+        "gross_profit": {
+          "p10": 184855.9,
+          "p50": 188913.5,
+          "p90": 193272.98
+        },
+        "opex": {
+          "p10": 128148.7,
+          "p50": 132169.86,
+          "p90": 136580.48
+        },
+        "net_income": {
+          "p10": 50929.49,
+          "p50": 57097.56,
+          "p90": 63053.95
+        }
+      },
+      {
+        "period": "2026-09-01",
+        "revenue": {
+          "p10": 228153.13,
+          "p50": 233022.68,
+          "p90": 237892.52
+        },
+        "gross_profit": {
+          "p10": 188281.25,
+          "p50": 192840.39,
+          "p90": 197247.52
+        },
+        "opex": {
+          "p10": 127898.95,
+          "p50": 132472.46,
+          "p90": 137143.68
+        },
+        "net_income": {
+          "p10": 54610.17,
+          "p50": 60857.84,
+          "p90": 66973.23
+        }
+      },
+      {
+        "period": "2026-10-01",
+        "revenue": {
+          "p10": 232736.12,
+          "p50": 237724.22,
+          "p90": 243313.15
+        },
+        "gross_profit": {
+          "p10": 192032.25,
+          "p50": 196748.72,
+          "p90": 201835.19
+        },
+        "opex": {
+          "p10": 127904.48,
+          "p50": 132142.05,
+          "p90": 136692.03
+        },
+        "net_income": {
+          "p10": 58236.73,
+          "p50": 64775.6,
+          "p90": 71321.43
+        }
+      },
+      {
+        "period": "2026-11-01",
+        "revenue": {
+          "p10": 237456.51,
+          "p50": 242397.84,
+          "p90": 247564.39
+        },
+        "gross_profit": {
+          "p10": 196210.96,
+          "p50": 200612.8,
+          "p90": 205130.41
+        },
+        "opex": {
+          "p10": 127772.77,
+          "p50": 132339.37,
+          "p90": 136650.56
+        },
+        "net_income": {
+          "p10": 62264.25,
+          "p50": 68910.87,
+          "p90": 75348.56
+        }
+      },
+      {
+        "period": "2026-12-01",
+        "revenue": {
+          "p10": 242001.6,
+          "p50": 247290.72,
+          "p90": 252539.38
+        },
+        "gross_profit": {
+          "p10": 200031.8,
+          "p50": 204515.99,
+          "p90": 209418.65
+        },
+        "opex": {
+          "p10": 128217.91,
+          "p50": 132180.0,
+          "p90": 136644.71
+        },
+        "net_income": {
+          "p10": 66647.25,
+          "p50": 72782.36,
+          "p90": 78970.06
+        }
+      }
+    ],
+    "totals": {
+      "revenue": {
+        "p10": 2637212.28,
+        "p50": 2666426.07,
+        "p90": 2700759.67
+      },
+      "gross_profit": {
+        "p10": 2180617.71,
+        "p50": 2207368.33,
+        "p90": 2237129.68
+      },
+      "opex": {
+        "p10": 1498688.12,
+        "p50": 1526168.79,
+        "p90": 1558406.12
+      },
+      "net_income": {
+        "p10": 644566.61,
+        "p50": 686027.77,
+        "p90": 727651.1
+      }
+    },
+    "prob_loss_month": 0.0,
+    "prob_total_loss": 0.0,
+    "noise": {
+      "revenue": {
+        "scale": "log",
+        "monthly_sd": 0.014761750701514314,
+        "autocorrelation": 0.0,
+        "level_sd": 0.008522700741229437,
+        "growth_sd": 0.0012344396077857912,
+        "level_fixed": false,
+        "growth_fixed": true
+      },
+      "opex": {
+        "scale": "log",
+        "monthly_sd": 0.021265861190671434,
+        "autocorrelation": 0.0,
+        "level_sd": 0.01227785068298337,
+        "growth_sd": 0.0017783406506618863,
+        "level_fixed": false,
+        "growth_fixed": true
+      }
+    },
+    "margin_sd": 0.004929,
+    "other_sd": 13.08,
+    "calibration": {
+      "revenue": {
+        "coverage": 0.8889,
+        "points": 18,
+        "widened_by": 1.0
+      },
+      "opex": {
+        "coverage": 0.7222,
+        "points": 18,
+        "widened_by": 1.356
+      }
+    },
+    "method": "Each path multiplies the point forecast by noise fitted to history: a starting-level error, a growth-rate error that compounds, and month-to-month AR(1) noise. Gross margin and other income vary around their fitted values. Lines are simulated independently. Ranges are widened, never narrowed, when the backtest shows they caught fewer than 80% of actual months."
   },
   "warnings": []
 }

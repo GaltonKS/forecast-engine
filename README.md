@@ -60,6 +60,7 @@ Send the key as `Authorization: Bearer <API_KEY>` or `X-API-Key: <API_KEY>`.
 |--------|----------------------------------------------|---------------------------------------|
 | GET    | `/health`                                    | liveness check (no key needed)        |
 | POST   | `/tenants`                                   | create a customer `{"name": "Acme"}`  |
+| PUT    | `/tenants/{id}`                              | create with your own id, or return it (idempotent) |
 | GET    | `/tenants/{id}`                              | read a customer                       |
 | POST   | `/tenants/{id}/actuals/upload`               | upload CSV (multipart field `file`)   |
 | GET    | `/tenants/{id}/actuals/monthly`              | history by month, ready to chart      |

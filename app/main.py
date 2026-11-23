@@ -154,6 +154,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.commit()
         return TenantOut(id=tenant.id, name=tenant.name, created_at=tenant.created_at)
 
+    @app.put("/tenants/{tenant_id}", response_model=TenantOut, dependencies=auth)
+    def put_tenant(tenant_id: uuid.UUID, body: TenantIn, db: Session = Depends(get_db)):
+        """Create a customer with an id the caller chooses, or return it if it exists.
+
+        Lets a front end that already has its own account ids (the GaltonKS site uses
+        one per firm) map them to tenants without storing a lookup table. Repeating
+        the call is safe: an existing tenant is returned unchanged, name included."""
+        tenant = db.get(Tenant, tenant_id)
+        if tenant is None:
+            tenant = Tenant(id=tenant_id, name=body.name)
+            db.add(tenant)
+            db.commit()
+        return TenantOut(id=tenant.id, name=tenant.name, created_at=tenant.created_at)
+
     @app.get("/tenants/{tenant_id}", response_model=TenantOut, dependencies=auth)
     def read_tenant(tenant: Tenant = Depends(get_tenant)):
         return TenantOut(id=tenant.id, name=tenant.name, created_at=tenant.created_at)

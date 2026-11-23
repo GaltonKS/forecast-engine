@@ -111,3 +111,16 @@ def test_tenant_isolation(client, tenant):
 def test_render_db_url_normalized():
     assert _normalize_db_url("postgres://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
     assert _normalize_db_url("postgresql://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
+
+
+def test_put_tenant_is_idempotent(client):
+    tid = "6b1f5c2e-8a4d-5e3f-9c1b-2d7e4f6a8b90"
+    assert client.put(f"/tenants/{tid}", json={"name": "Acme"}).status_code == 401
+    first = client.put(f"/tenants/{tid}", json={"name": "Acme"}, headers=H)
+    assert first.status_code == 200 and first.json()["id"] == tid
+    again = client.put(f"/tenants/{tid}", json={"name": "Renamed"}, headers=H).json()
+    # The existing tenant is returned unchanged (SQLite drops the timezone on read-back,
+    # so compare id and name).
+    assert (again["id"], again["name"]) == (tid, "Acme")
+    assert client.get(f"/tenants/{tid}", headers=H).json()["name"] == "Acme"
+    assert client.put("/tenants/not-a-uuid", json={"name": "x"}, headers=H).status_code == 422

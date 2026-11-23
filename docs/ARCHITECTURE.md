@@ -48,8 +48,8 @@ endpoints to queue and poll.
   concurrency if jobs start waiting. The synchronous `POST /forecasts` stays
   for quick runs. A job interrupted by a hard crash is redelivered after
   Valkey's visibility timeout (1 hour); after a normal deploy it finishes first.
-  Nothing yet marks a job that never ran (e.g. the worker is down) as failed,
-  so the frontend should time out its polling.
+  A job that no worker picks up, or that a worker never finishes, is marked
+  failed after `JOB_TIMEOUT_MINUTES` (default 10), so polling always ends.
 - **LightGBM not included.** Gradient boosting needs far more points than one
   company's 24-60 monthly values. It would lose to ETS/driver in the backtest
   and add a dependency. Worth revisiting with daily or weekly data, or pooled

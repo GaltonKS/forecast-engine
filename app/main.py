@@ -11,7 +11,7 @@ import secrets
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Iterator
 
@@ -28,7 +28,7 @@ from engine.ingest import IngestError
 from engine.schema import LineItem, ScenarioRequest
 
 from .config import Settings
-from .jobs import NoData, execute_job, save_forecast
+from .jobs import NoData, execute_job, expire_stale_jobs, save_forecast
 from .jobs import load_monthly as _load_monthly
 from .models import Account, Actual, Base, Forecast, Job, Tenant
 
@@ -159,6 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except NoData as e:
             raise HTTPException(status_code=422, detail=str(e))
 
+    job_timeout = timedelta(minutes=settings.job_timeout_minutes)
     celery = None
     if settings.broker_url:
         from .worker import make_celery
@@ -374,6 +375,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/tenants/{tenant_id}/jobs/{job_id}", response_model=JobOut, dependencies=auth)
     def read_job(job_id: uuid.UUID, tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)):
+        expire_stale_jobs(db, tenant.id, job_timeout)
         j = db.get(Job, job_id)
         if not j or j.tenant_id != tenant.id:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -387,6 +389,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tenant: Tenant = Depends(get_tenant),
         db: Session = Depends(get_db),
     ):
+        expire_stale_jobs(db, tenant.id, job_timeout)
         q = select(Job).where(Job.tenant_id == tenant.id)
         if kind:
             q = q.where(Job.kind == kind)

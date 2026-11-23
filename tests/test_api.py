@@ -185,3 +185,111 @@ def test_queue_down_returns_503_and_marks_job_failed(tmp_path):
         assert r.status_code == 503
         jobs = c.get(f"/tenants/{t}/jobs", headers=H).json()
         assert jobs[0]["status"] == "failed" and "job queue" in jobs[0]["error"]
+
+
+# ---------- stuck jobs time out ----------
+
+@pytest.fixture
+def idle_queue(tmp_path):
+    """An app whose queue accepts jobs but has no worker (in-memory broker)."""
+    from sqlalchemy.orm import sessionmaker
+
+    url = f"sqlite:///{tmp_path}/idle.db"
+
+    def make(timeout_minutes):
+        s = Settings(database_url=url, api_key=KEY, cors_origins=[], broker_url="memory://",
+                     job_timeout_minutes=timeout_minutes)
+        return TestClient(create_app(s))
+
+    return make, sessionmaker(bind=create_engine(url), expire_on_commit=False)
+
+
+def _queued_job(c):
+    t = c.post("/tenants", json={"name": "Idle"}, headers=H).json()["id"]
+    upload(c, t, SAMPLE.read_bytes())
+    r = c.post(f"/tenants/{t}/forecast-jobs", json={"simulations": 0}, headers=H)
+    assert r.status_code == 202
+    return t, r.json()["id"]
+
+
+def test_job_nobody_picks_up_times_out(idle_queue):
+    make, _ = idle_queue
+    with make(10) as c:
+        t, j = _queued_job(c)
+        assert c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()["status"] == "queued"
+    with make(0) as c:  # same database, timeout now passed
+        job = c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()
+        assert job["status"] == "failed" and "no worker picked" in job["error"]
+        assert job["finished_at"]
+        assert c.get(f"/tenants/{t}/jobs?status=failed", headers=H).json()[0]["id"] == j
+
+
+def test_job_stuck_running_times_out(idle_queue):
+    import uuid as _uuid
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import update as sa_update
+
+    from app.models import Job
+
+    make, Sessions = idle_queue
+    with make(10) as c:
+        t, j = _queued_job(c)
+        with Sessions() as db:  # a worker started it 11 minutes ago and died
+            db.execute(sa_update(Job).where(Job.id == _uuid.UUID(j)).values(
+                status="running", started_at=datetime.now(timezone.utc) - timedelta(minutes=11)))
+            db.commit()
+        job = c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()
+        assert job["status"] == "failed" and "didn't finish" in job["error"]
+
+
+def test_timed_out_job_is_not_run_later(idle_queue):
+    import uuid as _uuid
+
+    from app.jobs import execute_job
+
+    make, Sessions = idle_queue
+    with make(0) as c:
+        t, j = _queued_job(c)
+        assert c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()["status"] == "failed"
+        execute_job(Sessions, _uuid.UUID(j))  # the worker finally gets the message
+        job = c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()
+        assert job["status"] == "failed" and job["result"] is None
+        assert c.get(f"/tenants/{t}/forecasts", headers=H).json() == []
+
+
+def test_result_arriving_after_timeout_is_dropped(idle_queue, monkeypatch):
+    """Worker is mid-run when the API times the job out: the late result must
+    not flip the job to done, and no orphan forecast row is saved."""
+    import uuid as _uuid
+    from datetime import timedelta
+
+    import app.jobs as jobs_mod
+
+    make, Sessions = idle_queue
+    real = jobs_mod.run_forecast
+    with make(10) as c:
+        t, j = _queued_job(c)
+
+        def slow_forecast(monthly, req):
+            resp = real(monthly, req)
+            with Sessions() as db:  # meanwhile, a poll finds the job overdue
+                jobs_mod.expire_stale_jobs(db, _uuid.UUID(t), timedelta(minutes=-1))
+            return resp
+
+        monkeypatch.setattr(jobs_mod, "run_forecast", slow_forecast)
+        jobs_mod.execute_job(Sessions, _uuid.UUID(j))
+        job = c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()
+        assert job["status"] == "failed" and job["result"] is None and job["forecast_id"] is None
+        assert c.get(f"/tenants/{t}/forecasts", headers=H).json() == []
+
+
+def test_finished_jobs_never_time_out(tmp_path):
+    settings = Settings(database_url=f"sqlite:///{tmp_path}/f.db", api_key=KEY, cors_origins=[],
+                        job_timeout_minutes=0)  # everything unfinished is overdue at once
+    with TestClient(create_app(settings)) as c:
+        t = c.post("/tenants", json={"name": "F"}, headers=H).json()["id"]
+        upload(c, t, SAMPLE.read_bytes())
+        j = c.post(f"/tenants/{t}/forecast-jobs", json={"simulations": 0}, headers=H).json()["id"]
+        job = c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()
+        assert job["status"] == "done" and job["error"] is None

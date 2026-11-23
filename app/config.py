@@ -29,6 +29,10 @@ class Settings:
     broker_url: str | None = field(
         default_factory=lambda: os.getenv("REDIS_URL") or os.getenv("BROKER_URL") or None
     )
+    # A job still queued or running after this long is marked failed when read.
+    job_timeout_minutes: float = field(
+        default_factory=lambda: float(os.getenv("JOB_TIMEOUT_MINUTES", "10"))
+    )
     max_upload_bytes: int = field(
         default_factory=lambda: int(os.getenv("MAX_UPLOAD_MB", "10")) * 1024 * 1024
     )

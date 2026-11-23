@@ -75,6 +75,7 @@ TEST_DATABASE_URL=postgresql://user@localhost/forecast_test pytest -q tests/test
 | `API_KEY`      | required on every call except `/health`; API is open if unset |
 | `CORS_ORIGINS` | comma-separated origins allowed to call from a browser     |
 | `REDIS_URL`    | Valkey connection for the job queue (set by Render); jobs run in-process if unset |
+| `JOB_TIMEOUT_MINUTES` | a job still queued or running after this long is marked failed (default 10) |
 | `MAX_UPLOAD_MB`| upload size limit (default 10)                             |
 
 ## API
@@ -99,6 +100,12 @@ Send the key as `Authorization: Bearer <API_KEY>` or `X-API-Key: <API_KEY>`.
 Use the job endpoints from the frontend: queue, then poll every second or two
 until `status` is `done` or `failed` (`error` says why). A finished forecast job
 is also saved as a forecast (`forecast_id`).
+
+Every job reaches `done` or `failed`. If no worker picks a job up, or a worker
+dies mid-job, the job is marked `failed` with a "Timed out" error once it has
+been waiting or running for `JOB_TIMEOUT_MINUTES` (checked whenever jobs are
+read). A timed-out job stays failed: if a worker reaches it later, it skips it,
+and a result that arrives after the timeout is discarded rather than saved.
 
 Forecast request (all fields optional):
 

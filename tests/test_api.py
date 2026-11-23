@@ -293,3 +293,90 @@ def test_finished_jobs_never_time_out(tmp_path):
         j = c.post(f"/tenants/{t}/forecast-jobs", json={"simulations": 0}, headers=H).json()["id"]
         job = c.get(f"/tenants/{t}/jobs/{j}", headers=H).json()
         assert job["status"] == "done" and job["error"] is None
+
+
+# ---------- step 5: /query (stand-in model) ----------
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    import app.jobs as jobs_mod
+    from llm.client import LLMConfig
+    from llm.evals import fake_transport
+
+    def use(replies=None, transport=None):
+        t = transport or fake_transport(replies)
+        monkeypatch.setattr(jobs_mod, "llm_config", lambda: LLMConfig(base_url="http://llm.test/v1", model="fake", transport=t))
+
+    use()
+    return use
+
+
+def ask(c, t, prompt, **kw):
+    r = c.post(f"/tenants/{t}/query", json={"prompt": prompt, **kw}, headers=H)
+    assert r.status_code == 202, r.text
+    return c.get(f"/tenants/{t}/jobs/{r.json()['id']}", headers=H).json()
+
+
+def test_query_not_configured_is_503(client, tenant, monkeypatch):
+    for k in ("LLM_BASE_URL", "LLM_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    upload(client, tenant, SAMPLE.read_bytes())
+    r = client.post(f"/tenants/{tenant}/query", json={"prompt": "hi"}, headers=H)
+    assert r.status_code == 503 and "LLM_BASE_URL" in r.json()["detail"]
+
+
+def test_query_runs_scenarios_and_saves_them_with_the_prompt(client, tenant, fake_llm):
+    upload(client, tenant, SAMPLE.read_bytes())
+    prompt = "Compare hiring 2 vs 4 engineers in March, each costing 10k a month"
+    job = ask(client, tenant, prompt)
+    assert job["kind"] == "query" and job["status"] == "done", job
+    res = job["result"]
+    assert res["interpretation"]["intent"] == "scenarios"
+    assert [s["name"] for s in res["comparison"]["scenarios"]] == ["Hire 2", "Hire 4"]
+    deltas = [s["delta_point"]["net_income"] for s in res["comparison"]["scenarios"]]
+    assert deltas == [-200000, -400000]  # 10 months (Mar-Dec) x 20k / 40k: the engine's math
+    assert res["summary"][0].startswith("Baseline, next 12 months")
+    assert res["summary"][2] == "Hire 4: net income -400k vs baseline; revenue unchanged."
+    assert res["llm"]["model"] == "fake" and res["llm"]["attempts"] == 1
+    saved = client.get(f"/tenants/{tenant}/forecasts", headers=H).json()
+    assert {f["id"] for f in saved} == set(res["forecast_ids"])
+    assert all(f["prompt"] == prompt for f in saved)
+
+
+def test_query_baseline_and_horizon(client, tenant, fake_llm):
+    upload(client, tenant, SAMPLE.read_bytes())
+    res = ask(client, tenant, "Show me the forecast for the next two years", simulations=0)["result"]
+    assert res["interpretation"]["intent"] == "baseline"
+    assert len(res["comparison"]["baseline"]["months"]) == 24 and res["comparison"]["scenarios"] == []
+    assert res["forecast_ids"] == []
+
+
+def test_query_unsupported_and_interpret_only(client, tenant, fake_llm):
+    upload(client, tenant, SAMPLE.read_bytes())
+    res = ask(client, tenant, "How many months of cash runway do we have?")["result"]
+    assert res["interpretation"]["intent"] == "unsupported" and res["comparison"] is None
+    assert "cash balance" in res["interpretation"]["unsupported_reason"]
+    res = ask(client, tenant, "Raise prices 5% starting in April", run=False)["result"]
+    assert res["interpretation"]["scenarios"][0]["adjustments"][0]["value"] == 0.05
+    assert res["comparison"] is None and res["forecast_ids"] == []
+
+
+def test_query_fails_cleanly_when_model_is_down(client, tenant, fake_llm):
+    import httpx
+
+    fake_llm(transport=httpx.MockTransport(lambda req: httpx.Response(503, text="cold start")))
+    upload(client, tenant, SAMPLE.read_bytes())
+    job = ask(client, tenant, "Raise prices 5% starting in April")
+    assert job["status"] == "failed" and job["error"] == "Model endpoint returned 503"
+    assert client.get(f"/tenants/{tenant}/forecasts", headers=H).json() == []
+
+
+def test_query_warnings_reach_the_caller(client, tenant, fake_llm):
+    upload(client, tenant, SAMPLE.read_bytes())
+    res = ask(client, tenant, "What if revenue grows 30% a month?", simulations=0)["result"]
+    assert any("unusually high" in w for w in res["warnings"])
+
+
+def test_query_prompt_limits(client, tenant, fake_llm):
+    assert client.post(f"/tenants/{tenant}/query", json={"prompt": ""}, headers=H).status_code == 422
+    assert client.post(f"/tenants/{tenant}/query", json={"prompt": "x" * 2001}, headers=H).status_code == 422

@@ -6,7 +6,8 @@ forecasting models on the most recent months, and returns projections with
 every assumption, formula and accuracy score included, plus P10/P50/P90
 ranges from a Monte Carlo simulation. Scenarios (driver overrides and dated
 changes like a hire or a price rise) can be compared side by side. The math is
-deterministic. A future LLM layer will only turn prompts into scenarios.
+deterministic. Plain-language questions go through `/query`: an open model
+turns the prompt into scenario JSON, and the engine does the math.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the target architecture,
 build order, and what's still missing.
@@ -19,6 +20,13 @@ engine/            the math (step 1)
   stats.py         seasonality detection + models: driver, seasonal naive, ETS, ARIMA, Prophet (step 3)
   backtest.py      rolling-origin backtest and model selection (step 3)
   simulate.py      Monte Carlo ranges, calibration, dated adjustments (step 4)
+llm/               the prompt layer (step 5): prompt -> checked scenario JSON
+  schema.py        what the model must return (sent as a JSON schema) + API models
+  prompt.py        instructions and the company context sent with each prompt
+  client.py        OpenAI-compatible client for vLLM (Modal / RunPod)
+  interpret.py     parse, check, retry once, flag suspicious values
+  summary.py       plain-language results, written by code from engine numbers
+  evals.json       prompts with the scenario each should produce
 app/               the API (step 2)
   main.py          FastAPI routes
   models.py        database tables (source of truth for the schema)
@@ -26,8 +34,8 @@ app/               the API (step 2)
   worker.py        Celery worker that pulls jobs from Valkey (step 4)
   config.py        settings from environment variables
 render.yaml        Render blueprint: web service, worker, Valkey, Postgres
-scripts/           sample data generator + example run
-tests/             pytest suite (engine, models, scenarios, API)
+scripts/           sample data, example run, eval_llm.py, fake_llm_server.py
+tests/             pytest suite (engine, models, scenarios, LLM layer, API)
 ```
 
 ## Run locally
@@ -75,6 +83,11 @@ TEST_DATABASE_URL=postgresql://user@localhost/forecast_test pytest -q tests/test
 | `API_KEY`      | required on every call except `/health`; API is open if unset |
 | `CORS_ORIGINS` | comma-separated origins allowed to call from a browser     |
 | `REDIS_URL`    | Valkey connection for the job queue (set by Render); jobs run in-process if unset |
+| `LLM_BASE_URL` | model endpoint for `/query`, ending in `/v1`; `/query` returns 503 if unset |
+| `LLM_MODEL`    | model name the endpoint serves                             |
+| `LLM_API_KEY`  | sent as a Bearer token, if the endpoint needs one          |
+| `LLM_GUIDED`   | `json_schema` (default), `guided_json` (older vLLM) or `none` |
+| `LLM_TIMEOUT_SECONDS` | wait for the model (default 180, for GPU cold starts) |
 | `JOB_TIMEOUT_MINUTES` | a job still queued or running after this long is marked failed (default 10) |
 | `MAX_UPLOAD_MB`| upload size limit (default 10)                             |
 
@@ -94,6 +107,7 @@ Send the key as `Authorization: Bearer <API_KEY>` or `X-API-Key: <API_KEY>`.
 | GET    | `/tenants/{id}/forecasts/{forecast_id}`      | read one saved forecast               |
 | POST   | `/tenants/{id}/forecast-jobs`                | queue a forecast, returns a job (202) |
 | POST   | `/tenants/{id}/scenario-jobs`                | queue baseline + scenarios comparison |
+| POST   | `/tenants/{id}/query`                        | ask in plain language (queues a job)  |
 | GET    | `/tenants/{id}/jobs/{job_id}`                | poll a job; `result` once `done`      |
 | GET    | `/tenants/{id}/jobs`                         | list jobs (`?kind=`, `?status=`)      |
 
@@ -218,6 +232,58 @@ Revenue and opex each get their own model. COGS follows revenue through
 | 3-14 months   | driver model only, no backtest                                      |
 | 15-23 months  | backtest on 3-month windows; no seasonality                         |
 | 24+ months    | backtest on 6-month windows; seasonality detected                   |
+
+## Asking in plain language (`/query`)
+
+```json
+{ "prompt": "What if we hire two engineers in March at 120k a year and raise prices 5% from April?",
+  "horizon_months": null, "simulations": 1000, "run": true }
+```
+
+This queues a job. When it's done, `result` has:
+
+- `interpretation`: how the prompt was read: `intent` (`scenarios`, `baseline`
+  or `unsupported`), a one-line `explanation`, the `assumptions` the model had
+  to make (e.g. a salary it guessed), and the exact `scenarios` it built. Show
+  this to the user so they can check and correct it.
+- `warnings`: values worth a second look (e.g. 30%/month growth, which is
+  usually an annual rate typed as monthly) plus the engine's own warnings.
+- `summary`: plain-language results such as "Hire 2: net income -200k vs
+  baseline". Written by code from the engine's numbers, never by the model.
+- `comparison`: the full baseline + scenarios result (same as `/scenario-jobs`).
+- `forecast_ids`: each scenario is saved as a forecast with the prompt attached.
+
+`"run": false` only interprets the prompt, so a UI can show "here's what I
+understood" before running anything.
+
+**How the model is used.** The model sees the instructions, a short company
+context (last actual month, first forecast month, current drivers, recent
+averages) and the prompt. It must answer in the `LLMOutput` JSON shape, enforced
+by constrained decoding on vLLM. Code then checks every value; an unusable reply
+gets one retry with the error. The model never sees other tenants' data, and
+its output can only become scenario inputs, so a prompt can't make it do
+anything else. If the endpoint is down or slow, the job fails with a clear
+error ("Model endpoint returned 503", "timed out after 180s").
+
+The company context (summary figures, not raw rows) is sent to the model
+endpoint, so host it somewhere you're comfortable sending financial data.
+
+### Choosing and checking a model
+
+`llm/evals.json` holds 18 prompts with the scenario each should produce (on the
+sample data). Score any endpoint:
+
+```bash
+LLM_BASE_URL=https://.../v1 LLM_MODEL=<model> python scripts/eval_llm.py
+```
+
+To build the frontend before a GPU endpoint exists, run the stand-in model. It
+answers the eval prompts with their ideal replies:
+
+```bash
+uvicorn scripts.fake_llm_server:app --port 8800
+export LLM_BASE_URL=http://localhost:8800/v1 LLM_MODEL=fake
+```
 
 ## Ranges (Monte Carlo)
 

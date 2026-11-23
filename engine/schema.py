@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -54,9 +55,21 @@ class DriverOverrides(BaseModel):
     other_net: float | None = None
 
 
+ForecastMethod = Literal["auto", "driver", "seasonal_naive", "ets", "arima", "prophet"]
+
+
 class ForecastRequest(BaseModel):
     horizon_months: int = Field(default=12, ge=1, le=120)
     overrides: DriverOverrides = DriverOverrides()
+    method: ForecastMethod = Field(
+        default="auto",
+        description="Model for revenue and opex. 'auto' backtests every model and picks "
+        "the most accurate per line. A revenue/opex base or growth override always "
+        "uses the driver formula for that line.",
+    )
+    seasonal: bool | None = Field(
+        default=None, description="Force month-of-year seasonality on or off; null = detect"
+    )
 
 
 class ForecastMonth(BaseModel):
@@ -83,4 +96,45 @@ class ForecastResponse(BaseModel):
     drivers: dict[str, FittedDriver]
     formulas: dict[str, str]
     months: list[ForecastMonth]
+    models: dict[str, SeriesModel] = {}
     warnings: list[str] = []
+
+
+class Seasonality(BaseModel):
+    detected: bool
+    strength: float | None = None  # share of detrended variance explained by month of year
+    p_value: float | None = None
+    indices: list[float] | None = None  # Jan..Dec multipliers
+    note: str
+
+
+class ModelScore(BaseModel):
+    method: str
+    status: str  # ok | skipped | failed
+    wape: float | None = None  # weighted absolute % error: sum|error| / sum|actual|
+    bias: float | None = None  # sum(error) / sum|actual|; positive = over-forecast
+    folds: int = 0
+    note: str | None = None
+
+
+class HoldoutPoint(BaseModel):
+    period: date
+    actual: float
+    predicted: float
+
+
+class SeriesModel(BaseModel):
+    """How one line (revenue or opex) was forecast, and how accurate it was."""
+
+    method: str
+    label: str
+    selected_by: Literal["backtest", "requested", "override", "default"]
+    reason: str
+    seasonality: Seasonality
+    backtest_horizon: int | None = None
+    backtest_origins: list[date] = []
+    scores: list[ModelScore] = []
+    holdout: list[HoldoutPoint] = []  # chosen model's most recent backtest window
+
+
+ForecastResponse.model_rebuild()

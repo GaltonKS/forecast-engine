@@ -13,6 +13,11 @@ def show(title, resp):
     for name, d in resp.drivers.items():
         flag = " (override)" if d.overridden else ""
         print(f"  {name:15s} {d.value:>12,.4f}  {d.method}{flag}")
+    for line, sm in resp.models.items():
+        print(f"  {line}: {sm.method} ({sm.selected_by}) - {sm.reason}")
+        for sc in sm.scores:
+            err = f"WAPE {sc.wape:6.1%}  bias {sc.bias:+6.1%}" if sc.status == "ok" else sc.status
+            print(f"      {sc.method:15s} {err}")
     for w in resp.warnings:
         print(f"  WARNING: {w}")
     print(f"\n  {'month':10s} {'revenue':>12s} {'gross profit':>13s} {'opex':>12s} {'net income':>12s}")

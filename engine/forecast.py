@@ -1,13 +1,19 @@
-"""Driver-based forecast: fit drivers from history, then project forward.
+"""Forecast: fit drivers, pick a model per line by backtest, project forward.
 
-Deterministic on purpose: the same data and overrides always give the same
-numbers, and every number can be traced to a driver and a formula.
+Revenue and opex each get the model that was most accurate on recent months
+(driver formula, seasonal naive, ETS, ARIMA or Prophet). COGS follows revenue
+through gross margin, and other income stays flat. Scenario overrides on a
+line's base or growth switch that line to the driver formula, so "2% growth"
+means exactly 2%.
+
+Deterministic: the same data and request always give the same numbers.
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
+from .backtest import BacktestResult, backtest
+from .stats import MODELS, available_models, detect_seasonality, driver_path, fit_driver, future_index
 from .schema import (
     DriverOverrides,
     Drivers,
@@ -15,36 +21,28 @@ from .schema import (
     ForecastMonth,
     ForecastRequest,
     ForecastResponse,
+    HoldoutPoint,
+    ModelScore,
+    Seasonality,
+    SeriesModel,
 )
 
-ENGINE_VERSION = "0.1.0"
+ENGINE_VERSION = "0.2.0"
 MIN_HISTORY = 3
 RECOMMENDED_HISTORY = 12
+LINES = ("revenue", "opex")
 
-FORMULAS = {
-    "revenue": "revenue[t] = revenue_base * (1 + revenue_growth) ^ t",
+BASE_FORMULAS = {
     "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
     "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
-    "opex": "opex[t] = opex_base * (1 + opex_growth) ^ t",
     "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
     "net_income": "net_income[t] = operating_income[t] + other_net",
 }
 
 
-def _log_linear_growth(series: pd.Series) -> float:
-    """Monthly compound growth from a least-squares fit of log(value) on time.
-
-    More robust to a single noisy month than first-to-last CAGR.
-    """
-    s = series[series > 0]
-    if len(s) < 2:
-        return 0.0
-    t = np.arange(len(s))
-    slope = np.polyfit(t, np.log(s.to_numpy()), 1)[0]
-    return float(np.exp(slope) - 1)
-
-
-def fit_drivers(monthly: pd.DataFrame) -> tuple[dict[str, FittedDriver], list[str]]:
+def fit_drivers(
+    monthly: pd.DataFrame, seasonal: bool | None = None
+) -> tuple[dict[str, FittedDriver], list[str], dict[str, Seasonality]]:
     n = len(monthly)
     if n < MIN_HISTORY:
         raise ValueError(f"Need at least {MIN_HISTORY} months of history, got {n}")
@@ -59,40 +57,34 @@ def fit_drivers(monthly: pd.DataFrame) -> tuple[dict[str, FittedDriver], list[st
     if gaps:
         warnings.append(f"Months with no data were treated as zero: {', '.join(gaps)}")
 
-    trail12 = monthly.tail(RECOMMENDED_HISTORY)
-    trail6 = monthly.tail(6)
-    trail3 = monthly.tail(3)
-    k = len(trail12)
+    drivers, seasonality = {}, {}
+    k = min(n, 12)
+    for line in LINES:
+        profile = detect_seasonality(monthly[line], seasonal)
+        if seasonal is True and not profile.detected:
+            warnings.append(f"Seasonality requested but not applied to {line}: {profile.note}")
+        seasonality[line] = Seasonality(**profile.__dict__)
+        fit = fit_driver(monthly[line], profile)
+        adj = "seasonally adjusted " if fit.indices else ""
+        drivers[f"{line}_base"] = FittedDriver(
+            value=fit.base,
+            method=f"Average {adj}{line} of the last 3 months, rolled forward to the last month at {line}_growth",
+        )
+        drivers[f"{line}_growth"] = FittedDriver(
+            value=fit.growth, method=f"Log-linear trend fit over the last {k} months of {adj}{line}"
+        )
 
+    trail6 = monthly.tail(6)
     rev_sum = trail6["revenue"].sum()
     gm = float((rev_sum - trail6["cogs"].sum()) / rev_sum) if rev_sum else 0.0
-
-    drivers = {
-        "revenue_base": FittedDriver(
-            value=float(trail3["revenue"].mean()),
-            method="Average revenue of the last 3 months",
-        ),
-        "revenue_growth": FittedDriver(
-            value=_log_linear_growth(trail12["revenue"]),
-            method=f"Log-linear trend fit over the last {k} months",
-        ),
-        "gross_margin": FittedDriver(
-            value=gm, method="(revenue - cogs) / revenue over the last 6 months"
-        ),
-        "opex_base": FittedDriver(
-            value=float(trail3["opex"].mean()),
-            method="Average opex of the last 3 months",
-        ),
-        "opex_growth": FittedDriver(
-            value=_log_linear_growth(trail12["opex"]),
-            method=f"Log-linear trend fit over the last {k} months",
-        ),
-        "other_net": FittedDriver(
-            value=float(trail6["other"].mean()),
-            method="Average net other income of the last 6 months",
-        ),
-    }
-    return drivers, warnings
+    drivers["gross_margin"] = FittedDriver(
+        value=gm, method="(revenue - cogs) / revenue over the last 6 months"
+    )
+    drivers["other_net"] = FittedDriver(
+        value=float(trail6["other"].mean()), method="Average net other income of the last 6 months"
+    )
+    order = ["revenue_base", "revenue_growth", "gross_margin", "opex_base", "opex_growth", "other_net"]
+    return {name: drivers[name] for name in order}, warnings, seasonality
 
 
 def apply_overrides(
@@ -104,41 +96,132 @@ def apply_overrides(
     return out
 
 
-def project(drivers: Drivers, start: pd.Timestamp, horizon: int) -> list[ForecastMonth]:
+def _scores(bt: BacktestResult) -> list[ModelScore]:
+    return [
+        ModelScore(
+            method=s.method,
+            status=s.status,
+            wape=None if s.wape is None else round(s.wape, 5),
+            bias=None if s.bias is None else round(s.bias, 5),
+            folds=s.folds,
+            note=s.note,
+        )
+        for s in bt.scores
+    ]
+
+
+def _choose(
+    line: str, y: pd.Series, request: ForecastRequest, overridden: set[str]
+) -> tuple[str, str, str, BacktestResult | None]:
+    """Returns (method, selected_by, reason, backtest)."""
+    if overridden:
+        names = ", ".join(sorted(overridden))
+        return "driver", "override", f"Scenario overrides {names}, so the driver formula is used", None
+
+    available = available_models()
+    if request.method != "auto":
+        if request.method not in available:
+            raise ValueError(f"Method '{request.method}' is not installed on this server")
+        need = MODELS[request.method].min_train
+        if len(y) < need:
+            raise ValueError(f"Method '{request.method}' needs {need} months of history, have {len(y)}")
+
+    bt = backtest(y, available, request.seasonal)
+    if request.method != "auto":
+        return request.method, "requested", f"Requested method '{request.method}'", bt
+
+    best = bt.best(prefer_order=list(MODELS))
+    if best is None:
+        return "driver", "default", bt.note or "No model could be backtested; using the driver formula", bt
+    score = next(s for s in bt.scores if s.method == best)
+    reason = (
+        f"Lowest backtest error over {score.folds} origins x {bt.horizon} months "
+        f"(WAPE {score.wape:.1%}); simpler models win near-ties"
+    )
+    return best, "backtest", reason, bt
+
+
+def run_forecast(monthly: pd.DataFrame, request: ForecastRequest) -> ForecastResponse:
+    fitted, warnings, seasonality = fit_drivers(monthly, request.seasonal)
+    final = apply_overrides(fitted, request.overrides)
+    drivers = Drivers(**{k: v.value for k, v in final.items()})
+    last = monthly.index.max()
+    h = request.horizon_months
+    periods = future_index(monthly["revenue"], h)
+    overridden = set(request.overrides.model_dump(exclude_none=True))
+
+    paths, models, formulas = {}, {}, {}
+    for line in LINES:
+        y = monthly[line]
+        method, selected_by, reason, bt = _choose(
+            line, y, request, overridden & {f"{line}_base", f"{line}_growth"}
+        )
+        indices = seasonality[line].indices if seasonality[line].detected else None
+        if method != "driver":
+            try:
+                paths[line] = MODELS[method].fn(y, h, request.seasonal)
+            except Exception as e:
+                warnings.append(f"{method} failed on {line} ({e.__class__.__name__}); used the driver formula")
+                method, selected_by, reason = "driver", "default", f"{reason}; fell back after a fit error"
+        if method == "driver":
+            base, growth = getattr(drivers, f"{line}_base"), getattr(drivers, f"{line}_growth")
+            paths[line] = driver_path(base, growth, indices, periods)
+            season = " * season[month(t)]" if indices else ""
+            formulas[line] = f"{line}[t] = {line}_base * (1 + {line}_growth) ^ t{season}"
+        else:
+            formulas[line] = f"{line}[t] = {MODELS[method].label} forecast (see models.{line})"
+            for d in (f"{line}_base", f"{line}_growth"):
+                final[d] = final[d].model_copy(
+                    update={"method": f"{final[d].method} (reference only; {line} uses {method})"}
+                )
+
+        holdout = []
+        if bt and method in bt.holdouts:
+            holdout = [
+                HoldoutPoint(period=p.date(), actual=round(a, 2), predicted=round(float(f), 2))
+                for p, a, f in bt.holdouts[method]
+            ]
+        models[line] = SeriesModel(
+            method=method,
+            label=MODELS[method].label,
+            selected_by=selected_by,
+            reason=reason,
+            seasonality=seasonality[line],
+            backtest_horizon=bt.horizon if bt and bt.origins else None,
+            backtest_origins=[o.date() for o in bt.origins] if bt else [],
+            scores=_scores(bt) if bt else [],
+            holdout=holdout,
+        )
+        if (paths[line] < 0).any():
+            warnings.append(f"{line} forecast went negative and was floored at zero")
+            paths[line] = paths[line].clip(min=0)
+
     months = []
-    for t in range(1, horizon + 1):
-        revenue = drivers.revenue_base * (1 + drivers.revenue_growth) ** t
+    for i, period in enumerate(periods):
+        revenue, opex = float(paths["revenue"][i]), float(paths["opex"][i])
         cogs = revenue * (1 - drivers.gross_margin)
         gross_profit = revenue - cogs
-        opex = drivers.opex_base * (1 + drivers.opex_growth) ** t
         operating_income = gross_profit - opex
-        net_income = operating_income + drivers.other_net
         months.append(
             ForecastMonth(
-                period=(start + pd.DateOffset(months=t)).date(),
+                period=period.date(),
                 revenue=round(revenue, 2),
                 cogs=round(cogs, 2),
                 gross_profit=round(gross_profit, 2),
                 opex=round(opex, 2),
                 operating_income=round(operating_income, 2),
                 other_net=round(drivers.other_net, 2),
-                net_income=round(net_income, 2),
+                net_income=round(operating_income + drivers.other_net, 2),
             )
         )
-    return months
 
-
-def run_forecast(monthly: pd.DataFrame, request: ForecastRequest) -> ForecastResponse:
-    fitted, warnings = fit_drivers(monthly)
-    final = apply_overrides(fitted, request.overrides)
-    drivers = Drivers(**{k: v.value for k, v in final.items()})
-    last = monthly.index.max()
     return ForecastResponse(
         engine_version=ENGINE_VERSION,
         last_actual_period=last.date(),
         history_months=len(monthly),
         drivers=final,
-        formulas=FORMULAS,
-        months=project(drivers, last, request.horizon_months),
+        formulas={**formulas, **BASE_FORMULAS},
+        months=months,
+        models=models,
         warnings=warnings,
     )

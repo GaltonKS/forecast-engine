@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from engine import ForecastRequest, ForecastResponse, run_forecast, to_monthly
 from engine.forecast import run_scenarios
-from engine.schema import LineItem, ScenarioRequest
+from engine.schema import LineItem, ScenarioComparison, ScenarioRequest
+from llm.client import LLMConfig, LLMError
+from llm.interpret import interpret
+from llm.schema import QueryRequest, QueryResult
+from llm.summary import summarize
 
 from .models import Account, Actual, Forecast, Job, utcnow
 
@@ -33,7 +37,14 @@ def load_monthly(db: Session, tenant_id: uuid.UUID):
     return to_monthly(items)
 
 
-def save_forecast(db: Session, tenant_id: uuid.UUID, req: ForecastRequest, resp: ForecastResponse) -> Forecast:
+def llm_config() -> LLMConfig:
+    """Read per call so tests (and a changed env) take effect without a restart."""
+    return LLMConfig.from_env()
+
+
+def save_forecast(
+    db: Session, tenant_id: uuid.UUID, req: ForecastRequest, resp: ForecastResponse, prompt: str | None = None
+) -> Forecast:
     record = Forecast(
         tenant_id=tenant_id,
         engine_version=resp.engine_version,
@@ -41,6 +52,7 @@ def save_forecast(db: Session, tenant_id: uuid.UUID, req: ForecastRequest, resp:
         last_actual=resp.last_actual_period,
         overrides=req.overrides.model_dump(exclude_none=True),
         result=resp.model_dump(mode="json"),
+        prompt=prompt,
     )
     db.add(record)
     db.flush()
@@ -91,8 +103,14 @@ def execute_job(session_factory: sessionmaker, job_id: uuid.UUID) -> None:
             elif job.kind == "scenarios":
                 req = ScenarioRequest.model_validate(job.request)
                 result, forecast_id = run_scenarios(monthly, req).model_dump(mode="json"), None
+            elif job.kind == "query":
+                result, forecast_id = run_query(db, job.tenant_id, monthly, QueryRequest.model_validate(job.request)), None
             else:
                 raise ValueError(f"Unknown job kind '{job.kind}'")
+        except LLMError as e:  # endpoint down, or the model's reply unusable
+            db.rollback()
+            _finish(db, job_id, status="failed", error=str(e))
+            return
         except ValueError as e:  # bad input or not enough data: the caller's to fix
             db.rollback()
             _finish(db, job_id, status="failed", error=str(e))
@@ -114,6 +132,36 @@ def execute_job(session_factory: sessionmaker, job_id: uuid.UUID) -> None:
             log.warning("job %s was marked failed (timed out) before it finished; result dropped", job_id)
             return
         db.commit()
+
+
+def run_query(db: Session, tenant_id: uuid.UUID, monthly, req: QueryRequest) -> dict:
+    """Prompt -> scenarios (model) -> forecasts (engine) -> summary (code)."""
+    interp, warnings, call = interpret(req.prompt, monthly, llm_config(), req.horizon_months)
+    result = QueryResult(prompt=req.prompt, interpretation=interp, warnings=warnings, llm=call)
+    if not req.run or interp.intent == "unsupported":
+        return result.model_dump(mode="json")
+
+    opts = dict(horizon_months=interp.horizon_months, simulations=req.simulations, seed=req.seed)
+    if interp.scenarios:
+        comparison = run_scenarios(monthly, ScenarioRequest(scenarios=interp.scenarios, **opts))
+    else:  # baseline question
+        from engine.forecast import ENGINE_VERSION
+
+        comparison = ScenarioComparison(
+            engine_version=ENGINE_VERSION, baseline=run_forecast(monthly, ForecastRequest(**opts)), scenarios=[]
+        )
+    # Each scenario is saved as a forecast, with the prompt that produced it.
+    ids = []
+    for sc_req, sc in zip(interp.scenarios, comparison.scenarios):
+        freq = ForecastRequest(overrides=sc_req.overrides, adjustments=sc_req.adjustments, **opts)
+        ids.append(save_forecast(db, tenant_id, freq, sc.forecast, prompt=req.prompt).id)
+
+    engine_warnings = {w for sc in comparison.scenarios for w in sc.forecast.warnings} | set(comparison.baseline.warnings)
+    result.warnings = warnings + sorted(engine_warnings)
+    result.comparison = comparison
+    result.summary = summarize(comparison)
+    result.forecast_ids = ids
+    return result.model_dump(mode="json")
 
 
 def expire_stale_jobs(db: Session, tenant_id: uuid.UUID, timeout: timedelta) -> int:

@@ -26,6 +26,14 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         sync: false # your frontend's URL(s), comma-separated
+      # LLM endpoint for /query (step 5). Leave empty until the model is
+      # deployed; /query answers 503 "not configured" until then.
+      - key: LLM_BASE_URL
+        sync: false # e.g. https://<you>--vllm-serve.modal.run/v1
+      - key: LLM_MODEL
+        sync: false # the model name vLLM serves, e.g. Qwen/Qwen2.5-7B-Instruct
+      - key: LLM_API_KEY
+        sync: false
 
   # Runs forecast and scenario jobs from the queue. Plan left at Render's
   # default worker size (0.5 CPU / 512 MB); one job at a time.
@@ -46,6 +54,14 @@ services:
           type: keyvalue
           name: forecast-queue
           property: connectionString
+      # LLM endpoint for /query (step 5). Leave empty until the model is
+      # deployed; /query answers 503 "not configured" until then.
+      - key: LLM_BASE_URL
+        sync: false # e.g. https://<you>--vllm-serve.modal.run/v1
+      - key: LLM_MODEL
+        sync: false # the model name vLLM serves, e.g. Qwen/Qwen2.5-7B-Instruct
+      - key: LLM_API_KEY
+        sync: false
 
   # Valkey job queue. noeviction: a full queue rejects new jobs rather than
   # silently dropping queued ones. Paid plans persist to disk; the free plan

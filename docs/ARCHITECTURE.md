@@ -23,9 +23,9 @@
 2. FastAPI wired to frontend — **done** (API built; frontend wiring pending)
 3. Statistical / ML forecasting — **done** (seasonality, ETS, ARIMA, Prophet, backtest selection; LightGBM deferred, see below)
 4. Scenarios + Monte Carlo — **done** (dated adjustments, scenario comparison, calibrated P10/P50/P90, Valkey + Celery queue)
-5. LLM prompt layer (open model)
+5. LLM prompt layer (open model) — **code done**; needs a deployed model endpoint and an eval run (see below)
 
-## Where the code stands vs. the plan (after step 4)
+## Where the code stands vs. the plan (after step 5)
 
 **In place:** FastAPI, Postgres (tenants, actuals, saved forecasts with assumptions),
 CSV ingest, API-key auth, per-tenant query scoping, Render blueprint. Forecast
@@ -34,14 +34,16 @@ models per line, rolling-origin backtest with model selection, and the latest
 backtest window returned for charting. Monte Carlo P10/P50/P90 ranges checked
 against the backtest, dated adjustments, scenario comparison on paired
 simulations. Valkey + Celery job queue with a worker service, and job
-endpoints to queue and poll.
+endpoints to queue and poll. `/query`: the worker sends the prompt and a short
+company context to an OpenAI-compatible endpoint (vLLM), gets scenario JSON
+back under a JSON schema, checks it, runs it, and returns the interpretation,
+warnings, a code-written summary and the full comparison.
 
 **Gaps to close:**
 
-- **Endpoint names.** The diagram has `/query`, `/scenario` and `/forecast`. The code
-  has `/tenants/{id}/forecasts`, and scenarios are driver overrides on the forecast
-  request. Settle on one shape before the frontend is built against it. `/query` is
-  the LLM prompt endpoint and belongs to step 5.
+- **Endpoint names.** The diagram has `/query`, `/scenario` and `/forecast`.
+  The code has `/tenants/{id}/query`, `/scenario-jobs`, `/forecast-jobs` and
+  the synchronous `/forecasts`: tenant-scoped versions of the same three.
 - **Job queue: in place.** Forecasts and scenario comparisons can be queued
   (`/forecast-jobs`, `/scenario-jobs`) and polled (`/jobs/{id}`). The worker
   takes one job at a time (`--concurrency 1`); add workers or raise
@@ -60,9 +62,14 @@ endpoints to queue and poll.
   current four (`revenue`, `cogs`, `opex`, `other`).
 - **CSV only.** QuickBooks, Xero and bank feeds should each be a connector that
   outputs the same `LineItem` format, so the engine and API don't change.
-- **LLM layer.** Step 5. The `Scenario` model (`name`, `overrides`,
-  `adjustments`) is the "scenario JSON" the model will fill in with guided
-  JSON output; `/query` would turn a prompt into one and queue a scenario job.
+- **Model not deployed or chosen yet.** Everything around the model is built
+  and tested with a stand-in. Still to do: deploy vLLM on Modal or RunPod, set
+  `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`, run `scripts/eval_llm.py`, and
+  tune `llm/prompt.py` until the eval passes. A 7-8B instruct model with
+  constrained decoding is a reasonable first try; the eval decides.
+- **One prompt, no conversation.** Each `/query` stands alone. Follow-ups
+  ("now make it 3 engineers") would need the previous interpretation passed
+  back in.
 - **Uncertainty is per line, not joint.** Revenue and opex are simulated
   independently, which understates risk if costs fall when revenue does (or
   overstates it if they move together). Fine until there's data to estimate it.

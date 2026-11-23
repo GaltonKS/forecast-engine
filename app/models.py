@@ -81,7 +81,7 @@ class Forecast(Base):
     last_actual: Mapped[date] = mapped_column(Date)
     overrides: Mapped[dict] = mapped_column(JSONType, default=dict)
     result: Mapped[dict] = mapped_column(JSONType)  # full ForecastResponse
-    prompt: Mapped[str | None] = mapped_column(Text, default=None)  # set by the LLM layer later
+    prompt: Mapped[str | None] = mapped_column(Text, default=None)  # the prompt, for forecasts made by /query
 
 
 class Job(Base):
@@ -96,7 +96,7 @@ class Job(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), index=True
     )
-    kind: Mapped[str] = mapped_column(String(16))  # forecast | scenarios
+    kind: Mapped[str] = mapped_column(String(16))  # forecast | scenarios | query
     status: Mapped[str] = mapped_column(String(16), default="queued")
     request: Mapped[dict] = mapped_column(JSONType)
     result: Mapped[dict | None] = mapped_column(JSONType, default=None)

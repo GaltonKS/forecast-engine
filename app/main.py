@@ -26,8 +26,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from engine import ENGINE_VERSION, ForecastRequest, ForecastResponse, load_csv, run_forecast, to_monthly
 from engine.ingest import IngestError
 from engine.schema import LineItem, ScenarioRequest
+from llm.schema import QueryRequest
 
 from .config import Settings
+from . import jobs as jobs_mod
 from .jobs import NoData, execute_job, expire_stale_jobs, save_forecast
 from .jobs import load_monthly as _load_monthly
 from .models import Account, Actual, Base, Forecast, Job, Tenant
@@ -80,11 +82,12 @@ class ForecastSummary(BaseModel):
     last_actual: date
     overrides: dict
     methods: dict[str, str] = {}  # line -> model used, e.g. {"revenue": "ets"}
+    prompt: str | None = None  # set when the forecast came from /query
 
 
 class JobSummary(BaseModel):
     id: uuid.UUID
-    kind: Literal["forecast", "scenarios"]
+    kind: Literal["forecast", "scenarios", "query"]
     status: Literal["queued", "running", "done", "failed"]
     error: str | None = None
     forecast_id: uuid.UUID | None = None  # forecast jobs: the saved forecast
@@ -95,7 +98,7 @@ class JobSummary(BaseModel):
 
 class JobOut(JobSummary):
     request: dict
-    result: dict | None = None  # ForecastResponse or ScenarioComparison once done
+    result: dict | None = None  # ForecastResponse, ScenarioComparison or QueryResult once done
 
 
 def _job_summary(j: Job) -> dict:
@@ -331,6 +334,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 last_actual=f.last_actual,
                 overrides=f.overrides,
                 methods={k: v.get("method", "") for k, v in (f.result.get("models") or {}).items()},
+                prompt=f.prompt,
             )
             for f in rows
         ]
@@ -373,6 +377,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job = enqueue(db, tenant, "scenarios", body.model_dump(mode="json"), background)
         return JobOut(**_job_summary(job), request=job.request)
 
+    @app.post("/tenants/{tenant_id}/query", response_model=JobOut, status_code=202, dependencies=auth)
+    def start_query(
+        body: QueryRequest,
+        background: BackgroundTasks,
+        tenant: Tenant = Depends(get_tenant),
+        db: Session = Depends(get_db),
+    ):
+        """Ask in plain language, e.g. {"prompt": "What if we hire two engineers in
+        March and raise prices 5% from April?"}. A model turns the prompt into
+        scenarios, the engine runs them, and the job result has the
+        interpretation (check how the prompt was read), any warnings, a summary,
+        and the full comparison. {"run": false} only interprets."""
+        if not jobs_mod.llm_config().configured:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM not configured on this server: set LLM_BASE_URL and LLM_MODEL",
+            )
+        job = enqueue(db, tenant, "query", body.model_dump(mode="json"), background)
+        return JobOut(**_job_summary(job), request=job.request)
+
     @app.get("/tenants/{tenant_id}/jobs/{job_id}", response_model=JobOut, dependencies=auth)
     def read_job(job_id: uuid.UUID, tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)):
         expire_stale_jobs(db, tenant.id, job_timeout)
@@ -383,7 +407,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/tenants/{tenant_id}/jobs", response_model=list[JobSummary], dependencies=auth)
     def list_jobs(
-        kind: Literal["forecast", "scenarios"] | None = None,
+        kind: Literal["forecast", "scenarios", "query"] | None = None,
         status: Literal["queued", "running", "done", "failed"] | None = None,
         limit: int = 50,
         tenant: Tenant = Depends(get_tenant),

@@ -3,8 +3,10 @@
 A financial forecasting engine with an HTTP API. You upload a business's
 monthly financials, it fits growth and margin drivers, backtests several
 forecasting models on the most recent months, and returns projections with
-every assumption, formula and accuracy score included. The math is
-deterministic. A future LLM layer will only turn prompts into driver overrides.
+every assumption, formula and accuracy score included, plus P10/P50/P90
+ranges from a Monte Carlo simulation. Scenarios (driver overrides and dated
+changes like a hire or a price rise) can be compared side by side. The math is
+deterministic. A future LLM layer will only turn prompts into scenarios.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the target architecture,
 build order, and what's still missing.
@@ -16,13 +18,16 @@ engine/            the math (step 1)
   forecast.py      fit drivers, pick a model per line, apply overrides, project forward
   stats.py         seasonality detection + models: driver, seasonal naive, ETS, ARIMA, Prophet (step 3)
   backtest.py      rolling-origin backtest and model selection (step 3)
+  simulate.py      Monte Carlo ranges, calibration, dated adjustments (step 4)
 app/               the API (step 2)
   main.py          FastAPI routes
   models.py        database tables (source of truth for the schema)
+  jobs.py          runs a queued forecast/scenario job (step 4)
+  worker.py        Celery worker that pulls jobs from Valkey (step 4)
   config.py        settings from environment variables
-render.yaml        Render blueprint: web service + Postgres
+render.yaml        Render blueprint: web service, worker, Valkey, Postgres
 scripts/           sample data generator + example run
-tests/             pytest suite (engine, models, API)
+tests/             pytest suite (engine, models, scenarios, API)
 ```
 
 ## Run locally
@@ -35,21 +40,41 @@ uvicorn app.main:app --reload          # uses SQLite (local.db) by default
 pytest -q
 ```
 
+Without `REDIS_URL`, jobs run inside the API process right after the response
+is sent, so no queue is needed locally. To run the real queue:
+
+```bash
+redis-server --maxmemory-policy noeviction &       # or a Valkey container
+export REDIS_URL=redis://localhost:6379/0
+uvicorn app.main:app --reload &
+celery -A app.worker worker --concurrency 1 --loglevel INFO
+```
+
+To run the API tests against Postgres instead of SQLite (tables in that
+database are dropped and recreated):
+
+```bash
+TEST_DATABASE_URL=postgresql://user@localhost/forecast_test pytest -q tests/test_api.py
+```
+
 ## Deploy to Render
 
 1. Push this repo to GitHub.
 2. In Render: **New -> Blueprint**, then pick the repo. `render.yaml` creates the
-   `forecast-api` web service and the `forecast-db` Postgres database.
+   `forecast-api` web service, the `forecast-worker` background worker, the
+   `forecast-queue` Valkey instance and the `forecast-db` Postgres database.
 3. When prompted, set `CORS_ORIGINS` to your frontend's URL (for example
    `https://app.example.com`). `API_KEY` is generated for you. Copy it from the
    service's Environment tab.
-4. Tables are created automatically on first start.
+4. Tables are created automatically on first start (including the new `jobs`
+   table on an existing database).
 
 | env var        | purpose                                                    |
 |----------------|------------------------------------------------------------|
 | `DATABASE_URL` | Postgres connection (set by Render); SQLite if unset       |
 | `API_KEY`      | required on every call except `/health`; API is open if unset |
 | `CORS_ORIGINS` | comma-separated origins allowed to call from a browser     |
+| `REDIS_URL`    | Valkey connection for the job queue (set by Render); jobs run in-process if unset |
 | `MAX_UPLOAD_MB`| upload size limit (default 10)                             |
 
 ## API
@@ -63,18 +88,49 @@ Send the key as `Authorization: Bearer <API_KEY>` or `X-API-Key: <API_KEY>`.
 | GET    | `/tenants/{id}`                              | read a customer                       |
 | POST   | `/tenants/{id}/actuals/upload`               | upload CSV (multipart field `file`)   |
 | GET    | `/tenants/{id}/actuals/monthly`              | history by month, ready to chart      |
-| POST   | `/tenants/{id}/forecasts`                    | run and save a forecast               |
+| POST   | `/tenants/{id}/forecasts`                    | run and save a forecast (waits for it) |
 | GET    | `/tenants/{id}/forecasts`                    | list saved forecasts                  |
 | GET    | `/tenants/{id}/forecasts/{forecast_id}`      | read one saved forecast               |
+| POST   | `/tenants/{id}/forecast-jobs`                | queue a forecast, returns a job (202) |
+| POST   | `/tenants/{id}/scenario-jobs`                | queue baseline + scenarios comparison |
+| GET    | `/tenants/{id}/jobs/{job_id}`                | poll a job; `result` once `done`      |
+| GET    | `/tenants/{id}/jobs`                         | list jobs (`?kind=`, `?status=`)      |
+
+Use the job endpoints from the frontend: queue, then poll every second or two
+until `status` is `done` or `failed` (`error` says why). A finished forecast job
+is also saved as a forecast (`forecast_id`).
 
 Forecast request (all fields optional):
 
 ```json
 { "horizon_months": 12,
   "overrides": { "revenue_growth": 0.02, "opex_growth": 0.0 },
+  "adjustments": [
+    { "line": "opex", "kind": "add", "value": 30000, "start": "2026-03-01", "label": "Hire 2 engineers" },
+    { "line": "revenue", "kind": "pct", "value": 0.05, "start": "2026-04-01", "end": null, "label": "Price rise" } ],
   "method": "auto",
-  "seasonal": null }
+  "seasonal": null,
+  "simulations": 1000,
+  "seed": 0 }
 ```
+
+`adjustments` are dated changes on top of the forecast. `add` is currency per
+month (negative to subtract); `pct` scales the line (0.05 = +5%). `line` is
+`revenue`, `cogs`, `opex` or `other`; `end` is inclusive, `null` = to the
+horizon. A `pct` change on revenue carries through to COGS at the same margin.
+
+Scenario comparison request (same options, plus up to 10 named scenarios):
+
+```json
+{ "horizon_months": 12,
+  "scenarios": [
+    { "name": "Hire 2", "adjustments": [{ "line": "opex", "kind": "add", "value": 30000, "start": "2026-03-01" }] },
+    { "name": "Growth halves", "overrides": { "revenue_growth": 0.016 } } ] }
+```
+
+The result has the `baseline` and each scenario's full forecast, `delta_point`
+(difference in horizon totals) and `delta` (P10/P50/P90 of the difference in
+total revenue and net income).
 
 `method` is `auto` (default), `driver`, `seasonal_naive`, `ets`, `arima` or
 `prophet`. `seasonal` forces month-of-year seasonality on or off; `null` detects it.
@@ -83,7 +139,10 @@ The response has the monthly projections, each driver's value and how it was
 derived (`method`, `overridden`), the `formulas`, `models` (which model each
 line used, why, its seasonality, every model's backtest score, and the chosen
 model's predictions vs. actuals for the latest window) and `warnings` (short
-history, missing months). Your frontend can show "the math" straight from it. See
+history, missing months), and `uncertainty`: P10/P50/P90 per month for revenue,
+gross profit, opex and net income, horizon totals, the probability of a loss
+month, the fitted noise, and how well the ranges held up in the backtest.
+Your frontend can show "the math" straight from it. See
 `sample_data/example_response.json`.
 
 Re-uploading a month replaces that account's amount, so corrections are safe.
@@ -98,6 +157,13 @@ curl -X POST $API/tenants/$T/actuals/upload -H "X-API-Key: $KEY" \
      -F file=@sample_data/sample_financials.csv
 curl -X POST $API/tenants/$T/forecasts -H "X-API-Key: $KEY" \
      -H 'content-type: application/json' -d '{"overrides":{"revenue_growth":0.02}}'
+
+# queued scenario comparison, then poll
+J=$(curl -s -X POST $API/tenants/$T/scenario-jobs -H "X-API-Key: $KEY" \
+      -H 'content-type: application/json' \
+      -d '{"scenarios":[{"name":"Hire 2","adjustments":[{"line":"opex","kind":"add","value":30000,"start":"2026-03-01"}]}]}' \
+      | jq -r .id)
+curl -s $API/tenants/$T/jobs/$J -H "X-API-Key: $KEY" | jq '.status, .result.scenarios[0].delta'
 ```
 
 ## CSV format
@@ -145,6 +211,30 @@ Revenue and opex each get their own model. COGS follows revenue through
 | 3-14 months   | driver model only, no backtest                                      |
 | 15-23 months  | backtest on 3-month windows; no seasonality                         |
 | 24+ months    | backtest on 6-month windows; seasonality detected                   |
+
+## Ranges (Monte Carlo)
+
+Each of the 1,000 simulated paths (default) multiplies a line's point forecast
+by noise fitted to its last 12 months, on a log scale so it acts as a percentage:
+
+- **level error**: uncertainty in where the business is right now (drawn once per path)
+- **growth error**: uncertainty in the growth rate, which compounds over the horizon
+- **monthly noise**: month-to-month wobble, AR(1) so a bad month can carry into the next
+
+Gross margin varies around its fitted value (a per-path shift plus monthly
+noise), and other income varies month to month. Revenue and opex are simulated
+independently. P50 equals the point forecast.
+
+**Calibration.** The engine replays the backtest: for each past origin it
+builds the 80% range from the data available then and checks how many actual
+months fell inside. If fewer than 80% did, ranges are widened to match. They are
+never narrowed. The result is in `uncertainty.calibration`.
+
+**Scenarios.** A scenario's own assumptions carry no uncertainty: overriding
+`revenue_growth` removes the growth error for revenue, and a fixed `add`
+adjustment is exactly that amount. Baseline and scenarios use the same random
+draws (same seed), so `delta` shows the effect of the assumptions, not
+simulation noise. A fixed $30k/month hire shows as exactly -$30k/month.
 
 ## Security notes
 

@@ -22,16 +22,19 @@
 1. Data schema + simple driver forecast — **done**
 2. FastAPI wired to frontend — **done** (API built; frontend wiring pending)
 3. Statistical / ML forecasting — **done** (seasonality, ETS, ARIMA, Prophet, backtest selection; LightGBM deferred, see below)
-4. Scenarios + Monte Carlo
+4. Scenarios + Monte Carlo — **done** (dated adjustments, scenario comparison, calibrated P10/P50/P90, Valkey + Celery queue)
 5. LLM prompt layer (open model)
 
-## Where the code stands vs. the plan (after step 3)
+## Where the code stands vs. the plan (after step 4)
 
 **In place:** FastAPI, Postgres (tenants, actuals, saved forecasts with assumptions),
 CSV ingest, API-key auth, per-tenant query scoping, Render blueprint. Forecast
 engine: seasonality detection, driver / seasonal naive / ETS / ARIMA / Prophet
 models per line, rolling-origin backtest with model selection, and the latest
-backtest window returned for charting.
+backtest window returned for charting. Monte Carlo P10/P50/P90 ranges checked
+against the backtest, dated adjustments, scenario comparison on paired
+simulations. Valkey + Celery job queue with a worker service, and job
+endpoints to queue and poll.
 
 **Gaps to close:**
 
@@ -39,13 +42,14 @@ backtest window returned for charting.
   has `/tenants/{id}/forecasts`, and scenarios are driver overrides on the forecast
   request. Settle on one shape before the frontend is built against it. `/query` is
   the LLM prompt endpoint and belongs to step 5.
-- **No job queue yet.** Forecasts still run during the request. Measured after
-  step 3: an `auto` forecast (5 models x 3 backtest origins x 2 lines) takes
-  about 1.5-2.5 s on a dev machine, so expect several seconds on a Render
-  starter instance. That is slow but workable. Monte Carlo (step 4) multiplies
-  the work, so the Valkey + Celery queue should land with it, changing the API
-  once: start a job, then poll for its result. Scenario runs with overrides
-  skip the backtest for the overridden lines and stay fast.
+- **Job queue: in place.** Forecasts and scenario comparisons can be queued
+  (`/forecast-jobs`, `/scenario-jobs`) and polled (`/jobs/{id}`). The worker
+  takes one job at a time (`--concurrency 1`); add workers or raise
+  concurrency if jobs start waiting. The synchronous `POST /forecasts` stays
+  for quick runs. A job interrupted by a hard crash is redelivered after
+  Valkey's visibility timeout (1 hour); after a normal deploy it finishes first.
+  Nothing yet marks a job that never ran (e.g. the worker is down) as failed,
+  so the frontend should time out its polling.
 - **LightGBM not included.** Gradient boosting needs far more points than one
   company's 24-60 monthly values. It would lose to ETS/driver in the backtest
   and add a dependency. Worth revisiting with daily or weekly data, or pooled
@@ -56,5 +60,12 @@ backtest window returned for charting.
   current four (`revenue`, `cogs`, `opex`, `other`).
 - **CSV only.** QuickBooks, Xero and bank feeds should each be a connector that
   outputs the same `LineItem` format, so the engine and API don't change.
-- **LLM layer.** Stays separate until step 5. `DriverOverrides` (from step 1) is
-  already the "scenario JSON" the model will fill in.
+- **LLM layer.** Step 5. The `Scenario` model (`name`, `overrides`,
+  `adjustments`) is the "scenario JSON" the model will fill in with guided
+  JSON output; `/query` would turn a prompt into one and queue a scenario job.
+- **Uncertainty is per line, not joint.** Revenue and opex are simulated
+  independently, which understates risk if costs fall when revenue does (or
+  overstates it if they move together). Fine until there's data to estimate it.
+- **No migrations.** Tables are created with `create_all`, which adds new
+  tables (step 4's `jobs`) but never changes existing ones. The next change to
+  an existing column needs Alembic.

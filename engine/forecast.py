@@ -1,4 +1,5 @@
-"""Forecast: fit drivers, pick a model per line by backtest, project forward.
+"""Forecast: fit drivers, pick a model per line by backtest, project forward,
+then simulate P10/P50/P90 ranges and apply dated adjustments.
 
 Revenue and opex each get the model that was most accurate on recent months
 (driver formula, seasonal naive, ETS, ARIMA or Prophet). COGS follows revenue
@@ -6,28 +7,54 @@ through gross margin, and other income stays flat. Scenario overrides on a
 line's base or growth switch that line to the driver formula, so "2% growth"
 means exactly 2%.
 
-Deterministic: the same data and request always give the same numbers.
+Fitting and backtesting happen once in prepare(); build() then produces the
+baseline or any scenario from that, so comparing scenarios costs little more
+than one forecast.
+
+Deterministic: the same data, request and seed always give the same numbers.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
+import numpy as np
 import pandas as pd
 
 from .backtest import BacktestResult, backtest
 from .stats import MODELS, available_models, detect_seasonality, driver_path, fit_driver, future_index
+from .simulate import (
+    apply_adjustments,
+    adjustment_mask,
+    band,
+    calibrate,
+    draw,
+    estimate_noise,
+    line_paths,
+)
 from .schema import (
+    Adjustment,
+    Coverage,
     DriverOverrides,
     Drivers,
     FittedDriver,
     ForecastMonth,
+    ForecastOptions,
     ForecastRequest,
     ForecastResponse,
     HoldoutPoint,
+    LineNoise,
     ModelScore,
+    MonthBands,
+    ScenarioComparison,
+    ScenarioDelta,
+    ScenarioRequest,
+    ScenarioResult,
     Seasonality,
     SeriesModel,
+    Uncertainty,
 )
 
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.3.0"
 MIN_HISTORY = 3
 RECOMMENDED_HISTORY = 12
 LINES = ("revenue", "opex")
@@ -110,25 +137,19 @@ def _scores(bt: BacktestResult) -> list[ModelScore]:
     ]
 
 
-def _choose(
-    line: str, y: pd.Series, request: ForecastRequest, overridden: set[str]
-) -> tuple[str, str, str, BacktestResult | None]:
+def _select(y: pd.Series, opts: ForecastOptions) -> tuple[str, str, str, BacktestResult]:
     """Returns (method, selected_by, reason, backtest)."""
-    if overridden:
-        names = ", ".join(sorted(overridden))
-        return "driver", "override", f"Scenario overrides {names}, so the driver formula is used", None
-
     available = available_models()
-    if request.method != "auto":
-        if request.method not in available:
-            raise ValueError(f"Method '{request.method}' is not installed on this server")
-        need = MODELS[request.method].min_train
+    if opts.method != "auto":
+        if opts.method not in available:
+            raise ValueError(f"Method '{opts.method}' is not installed on this server")
+        need = MODELS[opts.method].min_train
         if len(y) < need:
-            raise ValueError(f"Method '{request.method}' needs {need} months of history, have {len(y)}")
+            raise ValueError(f"Method '{opts.method}' needs {need} months of history, have {len(y)}")
 
-    bt = backtest(y, available, request.seasonal)
-    if request.method != "auto":
-        return request.method, "requested", f"Requested method '{request.method}'", bt
+    bt = backtest(y, available, opts.seasonal)
+    if opts.method != "auto":
+        return opts.method, "requested", f"Requested method '{opts.method}'", bt
 
     best = bt.best(prefer_order=list(MODELS))
     if best is None:
@@ -141,39 +162,121 @@ def _choose(
     return best, "backtest", reason, bt
 
 
-def run_forecast(monthly: pd.DataFrame, request: ForecastRequest) -> ForecastResponse:
-    fitted, warnings, seasonality = fit_drivers(monthly, request.seasonal)
-    final = apply_overrides(fitted, request.overrides)
-    drivers = Drivers(**{k: v.value for k, v in final.items()})
-    last = monthly.index.max()
-    h = request.horizon_months
-    periods = future_index(monthly["revenue"], h)
-    overridden = set(request.overrides.model_dump(exclude_none=True))
+@dataclass
+class LinePlan:
+    method: str
+    selected_by: str
+    reason: str
+    bt: BacktestResult | None
+    stat_path: np.ndarray | None  # point forecast when the method isn't the driver formula
 
-    paths, models, formulas = {}, {}, {}
+
+@dataclass
+class Prepared:
+    monthly: pd.DataFrame
+    opts: ForecastOptions
+    fitted: dict[str, FittedDriver]
+    warnings: list[str]
+    seasonality: dict[str, Seasonality]
+    periods: pd.DatetimeIndex
+    plans: dict[str, LinePlan]
+    noise: dict[str, LineNoise]
+    margin_sd: float
+    other_sd: float
+    _coverage: dict[tuple[str, str], Coverage | None] = field(default_factory=dict)
+
+    def indices(self, line: str) -> list[float] | None:
+        s = self.seasonality[line]
+        return s.indices if s.detected else None
+
+    def coverage(self, line: str, method: str) -> Coverage | None:
+        key = (line, method)
+        if key not in self._coverage:
+            bt = self.plans[line].bt
+            result = None
+            if bt and method in bt.fold_preds:
+                def seasonal_for(train):
+                    p = detect_seasonality(train, self.opts.seasonal)
+                    return p.indices if p.detected else None
+                result = calibrate(self.monthly[line], bt.fold_preds[method], seasonal_for)
+            self._coverage[key] = result
+        return self._coverage[key]
+
+
+def prepare(monthly: pd.DataFrame, opts: ForecastOptions, skip_backtest: set[str] = frozenset()) -> Prepared:
+    """Everything that depends only on the data and options, not the scenario."""
+    fitted, warnings, seasonality = fit_drivers(monthly, opts.seasonal)
+    h = opts.horizon_months
+    periods = future_index(monthly["revenue"], h)
+    plans, noise = {}, {}
     for line in LINES:
         y = monthly[line]
-        method, selected_by, reason, bt = _choose(
-            line, y, request, overridden & {f"{line}_base", f"{line}_growth"}
-        )
-        indices = seasonality[line].indices if seasonality[line].detected else None
+        idx = seasonality[line].indices if seasonality[line].detected else None
+        noise[line] = estimate_noise(y, idx)
+        if line in skip_backtest:
+            # Driver-only backtest: cheap, and it calibrates the ranges exactly as
+            # a scenario comparison would, so both give the same answer.
+            plans[line] = LinePlan("driver", "override", "", backtest(y, ["driver"], opts.seasonal), None)
+            continue
+        method, selected_by, reason, bt = _select(y, opts)
+        stat_path = None
         if method != "driver":
             try:
-                paths[line] = MODELS[method].fn(y, h, request.seasonal)
+                stat_path = np.asarray(MODELS[method].fn(y, h, opts.seasonal), dtype=float)
             except Exception as e:
                 warnings.append(f"{method} failed on {line} ({e.__class__.__name__}); used the driver formula")
                 method, selected_by, reason = "driver", "default", f"{reason}; fell back after a fit error"
+        plans[line] = LinePlan(method, selected_by, reason, bt, stat_path)
+
+    trail6 = monthly.tail(6)
+    rev = trail6["revenue"].to_numpy(dtype=float)
+    ok = rev > 0
+    margins = 1 - trail6["cogs"].to_numpy(dtype=float)[ok] / rev[ok]
+    margin_sd = float(margins.std(ddof=1)) if len(margins) >= 2 else 0.0
+    other_sd = float(trail6["other"].std(ddof=1)) if len(trail6) >= 2 else 0.0
+    return Prepared(monthly, opts, fitted, warnings, seasonality, periods, plans, noise, margin_sd, other_sd)
+
+
+@dataclass
+class Sims:
+    totals: dict[str, np.ndarray]  # per-path horizon totals, for paired scenario deltas
+
+
+def build(
+    prep: Prepared, overrides: DriverOverrides, adjustments: list[Adjustment]
+) -> tuple[ForecastResponse, Sims | None]:
+    opts, periods, h = prep.opts, prep.periods, prep.opts.horizon_months
+    final = apply_overrides(prep.fitted, overrides)
+    drivers = Drivers(**{k: v.value for k, v in final.items()})
+    overridden = set(overrides.model_dump(exclude_none=True))
+    warnings = list(prep.warnings)
+
+    paths, models, formulas, widen, noise_used, calibration = {}, {}, {}, {}, {}, {}
+    for line in LINES:
+        plan = prep.plans[line]
+        ov = overridden & {f"{line}_base", f"{line}_growth"}
+        indices = prep.indices(line)
+        if ov:
+            method, selected_by, bt = "driver", "override", None
+            reason = f"Scenario overrides {', '.join(sorted(ov))}, so the driver formula is used"
+        else:
+            method, selected_by, reason, bt = plan.method, plan.selected_by, plan.reason, plan.bt
+
         if method == "driver":
             base, growth = getattr(drivers, f"{line}_base"), getattr(drivers, f"{line}_growth")
             paths[line] = driver_path(base, growth, indices, periods)
             season = " * season[month(t)]" if indices else ""
             formulas[line] = f"{line}[t] = {line}_base * (1 + {line}_growth) ^ t{season}"
         else:
+            paths[line] = plan.stat_path.copy()
             formulas[line] = f"{line}[t] = {MODELS[method].label} forecast (see models.{line})"
             for d in (f"{line}_base", f"{line}_growth"):
                 final[d] = final[d].model_copy(
                     update={"method": f"{final[d].method} (reference only; {line} uses {method})"}
                 )
+        if (paths[line] < 0).any():
+            warnings.append(f"{line} forecast went negative and was floored at zero")
+            paths[line] = paths[line].clip(min=0)
 
         holdout = []
         if bt and method in bt.holdouts:
@@ -186,42 +289,139 @@ def run_forecast(monthly: pd.DataFrame, request: ForecastRequest) -> ForecastRes
             label=MODELS[method].label,
             selected_by=selected_by,
             reason=reason,
-            seasonality=seasonality[line],
+            seasonality=prep.seasonality[line],
             backtest_horizon=bt.horizon if bt and bt.origins else None,
             backtest_origins=[o.date() for o in bt.origins] if bt else [],
             scores=_scores(bt) if bt else [],
             holdout=holdout,
         )
-        if (paths[line] < 0).any():
-            warnings.append(f"{line} forecast went negative and was floored at zero")
-            paths[line] = paths[line].clip(min=0)
 
+        cov = prep.coverage(line, method)
+        if cov:
+            calibration[line] = cov
+        widen[line] = cov.widened_by if cov else 1.0
+        noise_used[line] = prep.noise[line].model_copy(
+            update={"level_fixed": f"{line}_base" in ov, "growth_fixed": f"{line}_growth" in ov}
+        )
+
+    for adj in adjustments:
+        if not adjustment_mask(adj, periods).any():
+            name = f"'{adj.label}'" if adj.label else f"{adj.kind} {adj.value} on {adj.line}"
+            warnings.append(f"Adjustment {name} falls outside the forecast horizon and has no effect")
+
+    gm, other_net = drivers.gross_margin, drivers.other_net
+    revenue = apply_adjustments(paths["revenue"], "revenue", adjustments, periods)
+    cogs = apply_adjustments(revenue * (1 - gm), "cogs", adjustments, periods)
+    opex = apply_adjustments(paths["opex"], "opex", adjustments, periods)
+    other = apply_adjustments(np.full(h, other_net), "other", adjustments, periods)
     months = []
     for i, period in enumerate(periods):
-        revenue, opex = float(paths["revenue"][i]), float(paths["opex"][i])
-        cogs = revenue * (1 - drivers.gross_margin)
-        gross_profit = revenue - cogs
-        operating_income = gross_profit - opex
+        gp = revenue[i] - cogs[i]
+        oi = gp - opex[i]
         months.append(
             ForecastMonth(
                 period=period.date(),
-                revenue=round(revenue, 2),
-                cogs=round(cogs, 2),
-                gross_profit=round(gross_profit, 2),
-                opex=round(opex, 2),
-                operating_income=round(operating_income, 2),
-                other_net=round(drivers.other_net, 2),
-                net_income=round(operating_income + drivers.other_net, 2),
+                revenue=round(float(revenue[i]), 2),
+                cogs=round(float(cogs[i]), 2),
+                gross_profit=round(float(gp), 2),
+                opex=round(float(opex[i]), 2),
+                operating_income=round(float(oi), 2),
+                other_net=round(float(other[i]), 2),
+                net_income=round(float(oi + other[i]), 2),
             )
         )
+    adj_note = " + adjustments" if adjustments else ""
+    formulas = {
+        **formulas,
+        **BASE_FORMULAS,
+        "net_income": BASE_FORMULAS["net_income"] + adj_note,
+    }
+    if adjustments:
+        formulas["adjustments"] = "Each adjustment adds (currency/month) or scales (pct) its line from start through end"
 
-    return ForecastResponse(
+    uncertainty, sims = None, None
+    if opts.simulations > 0:
+        n = opts.simulations
+        d = draw(n, h, opts.seed)
+        rev_p = line_paths(paths["revenue"], noise_used["revenue"], d, "revenue", widen["revenue"]).clip(min=0)
+        opex_p = line_paths(paths["opex"], noise_used["opex"], d, "opex", widen["opex"]).clip(min=0)
+        shift_sd = 0.0 if "gross_margin" in overridden else prep.margin_sd / np.sqrt(6)
+        gm_p = np.clip(gm + shift_sd * d.margin_shift + prep.margin_sd * d.margin_monthly, -1, 1)
+        rev_p = apply_adjustments(rev_p, "revenue", adjustments, periods)
+        cogs_p = apply_adjustments(rev_p * (1 - gm_p), "cogs", adjustments, periods)
+        opex_p = apply_adjustments(opex_p, "opex", adjustments, periods)
+        other_p = apply_adjustments(other_net + prep.other_sd * d.other, "other", adjustments, periods)
+        gp_p = rev_p - cogs_p
+        ni_p = gp_p - opex_p + other_p
+
+        for line, cov in calibration.items():
+            if cov.coverage < 0.6:
+                warnings.append(
+                    f"{line} ranges caught only {cov.coverage:.0%} of backtest months (target 80%); "
+                    f"widened x{cov.widened_by:.2f}"
+                )
+        rb, gb, ob, nb = band(rev_p), band(gp_p), band(opex_p), band(ni_p)
+        totals = {"revenue": rev_p.sum(1), "gross_profit": gp_p.sum(1), "opex": opex_p.sum(1), "net_income": ni_p.sum(1)}
+        uncertainty = Uncertainty(
+            simulations=n,
+            seed=opts.seed,
+            months=[
+                MonthBands(period=p.date(), revenue=rb[i], gross_profit=gb[i], opex=ob[i], net_income=nb[i])
+                for i, p in enumerate(periods)
+            ],
+            totals={k: band(v) for k, v in totals.items()},
+            prob_loss_month=round(float((ni_p < 0).any(axis=1).mean()), 4),
+            prob_total_loss=round(float((totals["net_income"] < 0).mean()), 4),
+            noise=noise_used,
+            margin_sd=round(prep.margin_sd, 6),
+            other_sd=round(prep.other_sd, 2),
+            calibration=calibration,
+        )
+        sims = Sims(totals)
+
+    resp = ForecastResponse(
         engine_version=ENGINE_VERSION,
-        last_actual_period=last.date(),
-        history_months=len(monthly),
+        last_actual_period=prep.monthly.index.max().date(),
+        history_months=len(prep.monthly),
         drivers=final,
-        formulas={**formulas, **BASE_FORMULAS},
+        formulas=formulas,
         months=months,
         models=models,
+        adjustments=adjustments,
+        uncertainty=uncertainty,
         warnings=warnings,
     )
+    return resp, sims
+
+
+def run_forecast(monthly: pd.DataFrame, request: ForecastRequest) -> ForecastResponse:
+    overridden = set(request.overrides.model_dump(exclude_none=True))
+    # A line whose base or growth is overridden uses the driver formula, so
+    # skip its backtest; scenario runs stay fast.
+    skip = {line for line in LINES if overridden & {f"{line}_base", f"{line}_growth"}}
+    resp, _ = build(prepare(monthly, request, skip), request.overrides, request.adjustments)
+    return resp
+
+
+def _totals(resp: ForecastResponse, key: str) -> float:
+    return sum(getattr(m, key) for m in resp.months)
+
+
+def run_scenarios(monthly: pd.DataFrame, request: ScenarioRequest) -> ScenarioComparison:
+    prep = prepare(monthly, request)
+    baseline, base_sims = build(prep, DriverOverrides(), [])
+    results = []
+    for sc in request.scenarios:
+        resp, sims = build(prep, sc.overrides, sc.adjustments)
+        delta = None
+        if sims and base_sims:
+            delta = ScenarioDelta(
+                revenue=band(sims.totals["revenue"] - base_sims.totals["revenue"]),
+                net_income=band(sims.totals["net_income"] - base_sims.totals["net_income"]),
+            )
+        delta_point = {
+            k: round(_totals(resp, k) - _totals(baseline, k), 2)
+            for k in ("revenue", "gross_profit", "opex", "net_income")
+        }
+        results.append(ScenarioResult(name=sc.name, forecast=resp, delta=delta, delta_point=delta_point))
+    return ScenarioComparison(engine_version=ENGINE_VERSION, baseline=baseline, scenarios=results)

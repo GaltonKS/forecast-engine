@@ -58,9 +58,38 @@ class DriverOverrides(BaseModel):
 ForecastMethod = Literal["auto", "driver", "seasonal_naive", "ets", "arima", "prophet"]
 
 
-class ForecastRequest(BaseModel):
+class Adjustment(BaseModel):
+    """A dated change on top of the forecast: a hire, a price rise, a lost client.
+
+    kind "add": value is currency per month (negative to subtract).
+    kind "pct": value is a fraction, 0.05 = +5%, applied to that line.
+    Applies to months from start through end (inclusive; null = to the horizon).
+    """
+
+    line: Literal["revenue", "cogs", "opex", "other"]
+    kind: Literal["add", "pct"]
+    value: float
+    start: date
+    end: date | None = None
+    label: str | None = Field(default=None, max_length=200)
+
+    @field_validator("start", "end")
+    @classmethod
+    def to_month_start(cls, v: date | None) -> date | None:
+        return v.replace(day=1) if v else v
+
+    @field_validator("value")
+    @classmethod
+    def pct_floor(cls, v: float, info):
+        if info.data.get("kind") == "pct" and v <= -1:
+            raise ValueError("pct adjustments must be greater than -1 (-100%)")
+        return v
+
+
+class ForecastOptions(BaseModel):
+    """Settings shared by a single forecast and a scenario comparison."""
+
     horizon_months: int = Field(default=12, ge=1, le=120)
-    overrides: DriverOverrides = DriverOverrides()
     method: ForecastMethod = Field(
         default="auto",
         description="Model for revenue and opex. 'auto' backtests every model and picks "
@@ -70,6 +99,29 @@ class ForecastRequest(BaseModel):
     seasonal: bool | None = Field(
         default=None, description="Force month-of-year seasonality on or off; null = detect"
     )
+    simulations: int = Field(
+        default=1000, ge=0, le=20000,
+        description="Monte Carlo paths for P10/P50/P90 ranges; 0 = no ranges",
+    )
+    seed: int = Field(default=0, description="Random seed; same seed + data = same ranges")
+
+
+class ForecastRequest(ForecastOptions):
+    overrides: DriverOverrides = DriverOverrides()
+    adjustments: list[Adjustment] = Field(default=[], max_length=50)
+
+
+class Scenario(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    overrides: DriverOverrides = DriverOverrides()
+    adjustments: list[Adjustment] = Field(default=[], max_length=50)
+
+
+class ScenarioRequest(ForecastOptions):
+    """Baseline plus up to 10 named scenarios, run on the same fitted models and
+    the same random draws so differences come from the assumptions, not noise."""
+
+    scenarios: list[Scenario] = Field(min_length=1, max_length=10)
 
 
 class ForecastMonth(BaseModel):
@@ -97,6 +149,8 @@ class ForecastResponse(BaseModel):
     formulas: dict[str, str]
     months: list[ForecastMonth]
     models: dict[str, SeriesModel] = {}
+    adjustments: list[Adjustment] = []
+    uncertainty: Uncertainty | None = None
     warnings: list[str] = []
 
 
@@ -137,4 +191,77 @@ class SeriesModel(BaseModel):
     holdout: list[HoldoutPoint] = []  # chosen model's most recent backtest window
 
 
+class Band(BaseModel):
+    p10: float
+    p50: float
+    p90: float
+
+
+class MonthBands(BaseModel):
+    period: date
+    revenue: Band
+    gross_profit: Band
+    opex: Band
+    net_income: Band
+
+
+class Coverage(BaseModel):
+    """How often the 80% range caught the actual in the backtest."""
+
+    coverage: float  # share of backtest months inside P10-P90 before widening
+    points: int
+    widened_by: float  # 1.0 = ranges used as estimated; >1 = widened to reach 80%
+
+
+class LineNoise(BaseModel):
+    scale: Literal["log", "linear"]  # log: % noise; linear: currency noise
+    monthly_sd: float  # month-to-month noise around the trend (log units or currency)
+    autocorrelation: float  # how much a month's miss carries into the next
+    level_sd: float  # uncertainty of the starting level
+    growth_sd: float  # uncertainty of the monthly growth rate
+    level_fixed: bool = False  # true when the scenario sets the base
+    growth_fixed: bool = False  # true when the scenario sets the growth
+
+
+class Uncertainty(BaseModel):
+    simulations: int
+    seed: int
+    months: list[MonthBands]
+    totals: dict[str, Band]  # summed over the horizon: revenue, gross_profit, opex, net_income
+    prob_loss_month: float  # share of paths with at least one month of negative net income
+    prob_total_loss: float  # share of paths with negative net income over the whole horizon
+    noise: dict[str, LineNoise]  # revenue, opex
+    margin_sd: float
+    other_sd: float
+    calibration: dict[str, Coverage] = {}
+    method: str = (
+        "Each path multiplies the point forecast by noise fitted to history: a "
+        "starting-level error, a growth-rate error that compounds, and month-to-month "
+        "AR(1) noise. Gross margin and other income vary around their fitted values. "
+        "Lines are simulated independently. Ranges are widened, never narrowed, when "
+        "the backtest shows they caught fewer than 80% of actual months."
+    )
+
+
+class ScenarioDelta(BaseModel):
+    """Scenario minus baseline over the horizon, on paired simulation paths."""
+
+    revenue: Band
+    net_income: Band
+
+
+class ScenarioResult(BaseModel):
+    name: str
+    forecast: ForecastResponse
+    delta: ScenarioDelta | None = None  # null when simulations = 0
+    delta_point: dict[str, float]  # point-forecast difference in totals
+
+
+class ScenarioComparison(BaseModel):
+    engine_version: str
+    baseline: ForecastResponse
+    scenarios: list[ScenarioResult]
+
+
 ForecastResponse.model_rebuild()
+ScenarioResult.model_rebuild()

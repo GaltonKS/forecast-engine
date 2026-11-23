@@ -24,6 +24,11 @@ class Settings:
             o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()
         ]
     )
+    # Valkey/Redis URL for the Celery job queue. Unset: jobs run in the API
+    # process after the response is sent (fine for local dev and tests).
+    broker_url: str | None = field(
+        default_factory=lambda: os.getenv("REDIS_URL") or os.getenv("BROKER_URL") or None
+    )
     max_upload_bytes: int = field(
         default_factory=lambda: int(os.getenv("MAX_UPLOAD_MB", "10")) * 1024 * 1024
     )

@@ -15,7 +15,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Iterator
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from typing import Literal
+
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, select
@@ -23,10 +25,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from engine import ENGINE_VERSION, ForecastRequest, ForecastResponse, load_csv, run_forecast, to_monthly
 from engine.ingest import IngestError
-from engine.schema import LineItem
+from engine.schema import LineItem, ScenarioRequest
 
 from .config import Settings
-from .models import Account, Actual, Base, Forecast, Tenant
+from .jobs import NoData, execute_job, save_forecast
+from .jobs import load_monthly as _load_monthly
+from .models import Account, Actual, Base, Forecast, Job, Tenant
 
 log = logging.getLogger("forecast_api")
 
@@ -78,6 +82,29 @@ class ForecastSummary(BaseModel):
     methods: dict[str, str] = {}  # line -> model used, e.g. {"revenue": "ets"}
 
 
+class JobSummary(BaseModel):
+    id: uuid.UUID
+    kind: Literal["forecast", "scenarios"]
+    status: Literal["queued", "running", "done", "failed"]
+    error: str | None = None
+    forecast_id: uuid.UUID | None = None  # forecast jobs: the saved forecast
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class JobOut(JobSummary):
+    request: dict
+    result: dict | None = None  # ForecastResponse or ScenarioComparison once done
+
+
+def _job_summary(j: Job) -> dict:
+    return dict(
+        id=j.id, kind=j.kind, status=j.status, error=j.error, forecast_id=j.forecast_id,
+        created_at=j.created_at, started_at=j.started_at, finished_at=j.finished_at,
+    )
+
+
 # ---------- app factory ----------
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -127,17 +154,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return tenant
 
     def load_monthly(db: Session, tenant_id: uuid.UUID):
-        rows = db.execute(
-            select(Actual.period, Actual.amount, Account.name, Account.category)
-            .join(Account, Account.id == Actual.account_id)
-            .where(Actual.tenant_id == tenant_id)
-        ).all()
-        if not rows:
-            raise HTTPException(status_code=422, detail="No financial data uploaded for this tenant yet")
-        items = [
-            LineItem(period=p, account=n, category=c, amount=float(a)) for p, a, n, c in rows
-        ]
-        return to_monthly(items)
+        try:
+            return _load_monthly(db, tenant_id)
+        except NoData as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    celery = None
+    if settings.broker_url:
+        from .worker import make_celery
+
+        celery = make_celery(settings.broker_url)
+
+    def enqueue(db: Session, tenant: Tenant, kind: str, request: dict, background: BackgroundTasks) -> Job:
+        load_monthly(db, tenant.id)  # fail fast if there's no data
+        job = Job(tenant_id=tenant.id, kind=kind, request=request)
+        db.add(job)
+        db.commit()
+        if celery is None:
+            background.add_task(execute_job, SessionLocal, job.id)
+            return job
+        try:
+            from .worker import TASK_NAME
+
+            celery.send_task(TASK_NAME, args=[str(job.id)])
+        except Exception as e:
+            log.exception("could not enqueue job %s", job.id)
+            job.status, job.error = "failed", f"Could not reach the job queue ({e.__class__.__name__})"
+            db.commit()
+            raise HTTPException(status_code=503, detail="Job queue unavailable, try again shortly")
+        return job
 
     auth = [Depends(require_api_key)]
 
@@ -260,15 +305,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resp = run_forecast(monthly, body)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
-        record = Forecast(
-            tenant_id=tenant.id,
-            engine_version=resp.engine_version,
-            horizon_months=body.horizon_months,
-            last_actual=resp.last_actual_period,
-            overrides=body.overrides.model_dump(exclude_none=True),
-            result=resp.model_dump(mode="json"),
-        )
-        db.add(record)
+        record = save_forecast(db, tenant.id, body, resp)
         db.commit()
         return ForecastRecord(id=record.id, created_at=record.created_at, **resp.model_dump())
 
@@ -307,6 +344,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not f or f.tenant_id != tenant.id:
             raise HTTPException(status_code=404, detail="Forecast not found")
         return ForecastRecord(id=f.id, created_at=f.created_at, **f.result)
+
+    # ----- background jobs -----
+
+    @app.post("/tenants/{tenant_id}/forecast-jobs", response_model=JobOut, status_code=202, dependencies=auth)
+    def start_forecast_job(
+        body: ForecastRequest,
+        background: BackgroundTasks,
+        tenant: Tenant = Depends(get_tenant),
+        db: Session = Depends(get_db),
+    ):
+        """Queue a forecast (same body as POST /forecasts). Poll
+        GET /tenants/{id}/jobs/{job_id} until status is done or failed."""
+        job = enqueue(db, tenant, "forecast", body.model_dump(mode="json"), background)
+        return JobOut(**_job_summary(job), request=job.request)
+
+    @app.post("/tenants/{tenant_id}/scenario-jobs", response_model=JobOut, status_code=202, dependencies=auth)
+    def start_scenario_job(
+        body: ScenarioRequest,
+        background: BackgroundTasks,
+        tenant: Tenant = Depends(get_tenant),
+        db: Session = Depends(get_db),
+    ):
+        """Queue a baseline + scenarios comparison, e.g.
+        {"scenarios": [{"name": "Hire 2", "adjustments": [{"line": "opex", "kind": "add",
+        "value": 30000, "start": "2026-03-01"}]}]}"""
+        job = enqueue(db, tenant, "scenarios", body.model_dump(mode="json"), background)
+        return JobOut(**_job_summary(job), request=job.request)
+
+    @app.get("/tenants/{tenant_id}/jobs/{job_id}", response_model=JobOut, dependencies=auth)
+    def read_job(job_id: uuid.UUID, tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)):
+        j = db.get(Job, job_id)
+        if not j or j.tenant_id != tenant.id:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return JobOut(**_job_summary(j), request=j.request, result=j.result)
+
+    @app.get("/tenants/{tenant_id}/jobs", response_model=list[JobSummary], dependencies=auth)
+    def list_jobs(
+        kind: Literal["forecast", "scenarios"] | None = None,
+        status: Literal["queued", "running", "done", "failed"] | None = None,
+        limit: int = 50,
+        tenant: Tenant = Depends(get_tenant),
+        db: Session = Depends(get_db),
+    ):
+        q = select(Job).where(Job.tenant_id == tenant.id)
+        if kind:
+            q = q.where(Job.kind == kind)
+        if status:
+            q = q.where(Job.status == status)
+        rows = db.scalars(q.order_by(Job.created_at.desc()).limit(min(max(limit, 1), 200)))
+        return [JobSummary(**_job_summary(j)) for j in rows]
 
     return app
 

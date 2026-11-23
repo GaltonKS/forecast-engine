@@ -82,3 +82,27 @@ class Forecast(Base):
     overrides: Mapped[dict] = mapped_column(JSONType, default=dict)
     result: Mapped[dict] = mapped_column(JSONType)  # full ForecastResponse
     prompt: Mapped[str | None] = mapped_column(Text, default=None)  # set by the LLM layer later
+
+
+class Job(Base):
+    """A forecast or scenario comparison run in the background.
+
+    queued -> running -> done | failed. The result lives here (and, for a
+    forecast, also as a row in forecasts), so polling needs only this table.
+    """
+
+    __tablename__ = "jobs"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16))  # forecast | scenarios
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    request: Mapped[dict] = mapped_column(JSONType)
+    result: Mapped[dict | None] = mapped_column(JSONType, default=None)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    forecast_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
+    attempts: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

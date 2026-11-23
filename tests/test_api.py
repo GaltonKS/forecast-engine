@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -9,6 +10,8 @@ sys.path.insert(0, str(ROOT))
 
 from app.config import Settings, _normalize_db_url  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.models import Base  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
 
 SAMPLE = ROOT / "sample_data" / "sample_financials.csv"
 KEY = "test-key"
@@ -17,7 +20,17 @@ H = {"Authorization": f"Bearer {KEY}"}
 
 @pytest.fixture
 def client(tmp_path):
-    settings = Settings(database_url=f"sqlite:///{tmp_path}/test.db", api_key=KEY, cors_origins=[])
+    # TEST_DATABASE_URL=postgresql://... runs these against Postgres; tables are
+    # dropped first so every test starts clean. Default: a fresh SQLite file.
+    url = os.getenv("TEST_DATABASE_URL")
+    if url:
+        url = _normalize_db_url(url)
+        engine = create_engine(url)
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+    else:
+        url = f"sqlite:///{tmp_path}/test.db"
+    settings = Settings(database_url=url, api_key=KEY, cors_origins=[])
     with TestClient(create_app(settings)) as c:
         yield c
 
@@ -111,3 +124,64 @@ def test_tenant_isolation(client, tenant):
 def test_render_db_url_normalized():
     assert _normalize_db_url("postgres://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
     assert _normalize_db_url("postgresql://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
+
+
+# ---------- step 4: background jobs (in-process fallback, no broker) ----------
+
+def test_forecast_job_runs_and_saves_forecast(client, tenant):
+    upload(client, tenant, SAMPLE.read_bytes())
+    r = client.post(f"/tenants/{tenant}/forecast-jobs", json={"horizon_months": 6}, headers=H)
+    assert r.status_code == 202 and r.json()["status"] == "queued"
+    job = client.get(f"/tenants/{tenant}/jobs/{r.json()['id']}", headers=H).json()
+    assert job["status"] == "done", job
+    assert job["result"]["uncertainty"]["simulations"] == 1000
+    saved = client.get(f"/tenants/{tenant}/forecasts/{job['forecast_id']}", headers=H)
+    assert saved.status_code == 200
+    assert saved.json()["months"] == job["result"]["months"]
+
+
+def test_scenario_job(client, tenant):
+    upload(client, tenant, SAMPLE.read_bytes())
+    body = {"scenarios": [{"name": "Hire", "adjustments": [
+        {"line": "opex", "kind": "add", "value": 30000, "start": "2026-03-01"}]}]}
+    r = client.post(f"/tenants/{tenant}/scenario-jobs", json=body, headers=H)
+    job = client.get(f"/tenants/{tenant}/jobs/{r.json()['id']}", headers=H).json()
+    assert job["status"] == "done", job
+    assert job["result"]["scenarios"][0]["delta_point"]["net_income"] == -300000
+    jobs = client.get(f"/tenants/{tenant}/jobs?kind=scenarios", headers=H).json()
+    assert [j["id"] for j in jobs] == [job["id"]] and "result" not in jobs[0]
+
+
+def test_job_without_data_is_rejected_up_front(client, tenant):
+    r = client.post(f"/tenants/{tenant}/forecast-jobs", json={}, headers=H)
+    assert r.status_code == 422
+
+
+def test_failed_job_reports_error(client, tenant):
+    # 8 months of data, ETS needs 12: the job fails with a readable reason
+    rows = "period,account,category,amount\n" + "".join(
+        f"2025-{m:02d}-01,Sales,revenue,100\n" for m in range(1, 9))
+    upload(client, tenant, rows.encode())
+    r = client.post(f"/tenants/{tenant}/forecast-jobs", json={"method": "ets"}, headers=H)
+    job = client.get(f"/tenants/{tenant}/jobs/{r.json()['id']}", headers=H).json()
+    assert job["status"] == "failed" and "needs 12 months" in job["error"]
+
+
+def test_jobs_are_tenant_scoped(client, tenant):
+    upload(client, tenant, SAMPLE.read_bytes())
+    job_id = client.post(f"/tenants/{tenant}/forecast-jobs", json={}, headers=H).json()["id"]
+    other = client.post("/tenants", json={"name": "Other"}, headers=H).json()["id"]
+    assert client.get(f"/tenants/{other}/jobs/{job_id}", headers=H).status_code == 404
+    assert client.get(f"/tenants/{other}/jobs", headers=H).json() == []
+
+
+def test_queue_down_returns_503_and_marks_job_failed(tmp_path):
+    settings = Settings(database_url=f"sqlite:///{tmp_path}/q.db", api_key=KEY, cors_origins=[],
+                        broker_url="redis://127.0.0.1:1/0")  # nothing listens on port 1
+    with TestClient(create_app(settings)) as c:
+        t = c.post("/tenants", json={"name": "Q"}, headers=H).json()["id"]
+        upload(c, t, SAMPLE.read_bytes())
+        r = c.post(f"/tenants/{t}/forecast-jobs", json={}, headers=H)
+        assert r.status_code == 503
+        jobs = c.get(f"/tenants/{t}/jobs", headers=H).json()
+        assert jobs[0]["status"] == "failed" and "job queue" in jobs[0]["error"]

@@ -66,6 +66,10 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
                     f"{name}: {key} of {g:.1%} per month ({(1 + g) ** 12 - 1:.0%} per year) is unusually "
                     "high. Check it wasn't meant as an annual rate."
                 )
+        for key in ("dso_days", "dio_days", "dpo_days"):
+            v = getattr(overrides, key)
+            if v is not None and v > 180:
+                warnings.append(f"{name}: {key} of {v:.0f} days is unusually long. Check the number.")
         if overrides.gross_margin is not None and overrides.gross_margin < 0:
             warnings.append(f"{name}: gross_margin of {overrides.gross_margin:.0%} means selling below cost.")
 
@@ -92,6 +96,8 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
                     f"{name}: '{a.label}' adds {a.value:,.0f} per month to {a.line}, over "
                     f"{LARGE_CHANGE_RATIO:g}x its recent monthly average ({recent:,.0f}). Check the size."
                 )
+            if a.line in ("capex", "debt", "equity") and not ctx.opening:
+                warnings.append(f"{name}: '{a.label}' is a cash item, but there's no balance sheet; it has no effect.")
             adjustments.append(
                 Adjustment(line=a.line, kind=a.kind, value=a.value, start=start, end=end, label=a.label)
             )
@@ -109,9 +115,13 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
 
 
 def interpret(
-    prompt: str, monthly: pd.DataFrame, cfg: LLMConfig, horizon_override: int | None = None
+    prompt: str,
+    monthly: pd.DataFrame,
+    cfg: LLMConfig,
+    horizon_override: int | None = None,
+    balances: pd.DataFrame | None = None,
 ) -> tuple[Interpretation, list[str], LLMCall]:
-    ctx = build_context(monthly)
+    ctx = build_context(monthly, balances)
     msgs = messages(ctx, prompt)
     schema = LLMOutput.model_json_schema()
     latency, ptok, ctok, last_error = 0.0, 0, 0, None

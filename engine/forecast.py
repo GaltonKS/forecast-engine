@@ -22,6 +22,7 @@ import pandas as pd
 
 from .backtest import BacktestResult, backtest
 from .stats import MODELS, available_models, detect_seasonality, driver_path, fit_driver, future_index
+from . import statements as st
 from .simulate import (
     apply_adjustments,
     adjustment_mask,
@@ -51,13 +52,25 @@ from .schema import (
     ScenarioResult,
     Seasonality,
     SeriesModel,
+    RunwayBand,
     Uncertainty,
 )
 
-ENGINE_VERSION = "0.3.0"
+ENGINE_VERSION = "0.4.0"
 MIN_HISTORY = 3
 RECOMMENDED_HISTORY = 12
 LINES = ("revenue", "opex")
+
+BALANCE_FORMULAS = {
+    "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
+    "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
+    "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
+    "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+    "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
+    "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
+    "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
+    "cash": "cash[t] = cash[t-1] + operating - capex + debt and equity raised",
+}
 
 BASE_FORMULAS = {
     "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
@@ -183,6 +196,8 @@ class Prepared:
     noise: dict[str, LineNoise]
     margin_sd: float
     other_sd: float
+    opening: st.Opening | None = None
+    balance_fitted: dict[str, FittedDriver] = field(default_factory=dict)
     _coverage: dict[tuple[str, str], Coverage | None] = field(default_factory=dict)
 
     def indices(self, line: str) -> list[float] | None:
@@ -203,7 +218,12 @@ class Prepared:
         return self._coverage[key]
 
 
-def prepare(monthly: pd.DataFrame, opts: ForecastOptions, skip_backtest: set[str] = frozenset()) -> Prepared:
+def prepare(
+    monthly: pd.DataFrame,
+    opts: ForecastOptions,
+    skip_backtest: set[str] = frozenset(),
+    balances: pd.DataFrame | None = None,
+) -> Prepared:
     """Everything that depends only on the data and options, not the scenario."""
     fitted, warnings, seasonality = fit_drivers(monthly, opts.seasonal)
     h = opts.horizon_months
@@ -234,7 +254,13 @@ def prepare(monthly: pd.DataFrame, opts: ForecastOptions, skip_backtest: set[str
     margins = 1 - trail6["cogs"].to_numpy(dtype=float)[ok] / rev[ok]
     margin_sd = float(margins.std(ddof=1)) if len(margins) >= 2 else 0.0
     other_sd = float(trail6["other"].std(ddof=1)) if len(trail6) >= 2 else 0.0
-    return Prepared(monthly, opts, fitted, warnings, seasonality, periods, plans, noise, margin_sd, other_sd)
+    opening, bwarn = st.opening_balance(monthly, balances)
+    warnings.extend(bwarn)
+    balance_fitted = st.fit_balance_drivers(monthly, balances, opening) if opening else {}
+    return Prepared(
+        monthly, opts, fitted, warnings, seasonality, periods, plans, noise, margin_sd, other_sd,
+        opening=opening, balance_fitted=balance_fitted,
+    )
 
 
 @dataclass
@@ -246,10 +272,19 @@ def build(
     prep: Prepared, overrides: DriverOverrides, adjustments: list[Adjustment]
 ) -> tuple[ForecastResponse, Sims | None]:
     opts, periods, h = prep.opts, prep.periods, prep.opts.horizon_months
-    final = apply_overrides(prep.fitted, overrides)
-    drivers = Drivers(**{k: v.value for k, v in final.items()})
     overridden = set(overrides.model_dump(exclude_none=True))
     warnings = list(prep.warnings)
+    if prep.opening is None:
+        # Balance sheet drivers and cash lines need an uploaded balance sheet.
+        ignored = sorted(overridden & set(st.BALANCE_DRIVERS))
+        cash_adj = [a for a in adjustments if a.line in st.CASH_LINES]
+        if ignored or cash_adj:
+            what = ", ".join(ignored + sorted({a.line for a in cash_adj}))
+            warnings.append(f"{what} need a balance sheet (upload balances for the last actual month); ignored")
+        overrides = overrides.model_copy(update={k: None for k in st.BALANCE_DRIVERS})
+        overridden -= set(st.BALANCE_DRIVERS)
+    final = apply_overrides({**prep.fitted, **prep.balance_fitted}, overrides)
+    drivers = Drivers(**{k: v.value for k, v in final.items()})
 
     paths, models, formulas, widen, noise_used, calibration = {}, {}, {}, {}, {}, {}
     for line in LINES:
@@ -339,6 +374,14 @@ def build(
     if adjustments:
         formulas["adjustments"] = "Each adjustment adds (currency/month) or scales (pct) its line from start through end"
 
+    opening_row = balance_sheet = cash_flow = cash_summary = None
+    if prep.opening:
+        stm = st.project(prep.opening, drivers, revenue, cogs, opex, other, adjustments, periods)
+        opening_row, balance_sheet, cash_flow, cash_summary = st.to_models(prep.opening, stm, periods)
+        formulas.update(BALANCE_FORMULAS)
+        if any(r.fixed_assets < 0 for r in balance_sheet):
+            warnings.append("Fixed assets go negative: depreciation exceeds the asset base plus capex")
+
     uncertainty, sims = None, None
     if opts.simulations > 0:
         n = opts.simulations
@@ -362,13 +405,24 @@ def build(
                 )
         rb, gb, ob, nb = band(rev_p), band(gp_p), band(opex_p), band(ni_p)
         totals = {"revenue": rev_p.sum(1), "gross_profit": gp_p.sum(1), "opex": opex_p.sum(1), "net_income": ni_p.sum(1)}
+        cb, prob_cash_out, runway_band, ending_cash = [None] * h, None, None, None
+        if prep.opening:
+            cash_p = st.project(prep.opening, drivers, rev_p, cogs_p, opex_p, other_p, adjustments, periods)["cash"]
+            cb = band(cash_p)
+            months_left = st.runway(cash_p, prep.opening.values["cash"])
+            prob_cash_out = round(float(np.isfinite(months_left).mean()), 4)
+            q = np.quantile(months_left, [0.1, 0.5, 0.9], method="inverted_cdf")
+            runway_band = RunwayBand(**{k: (int(v) if np.isfinite(v) else None) for k, v in zip(("p10", "p50", "p90"), q)})
+            ending_cash = cash_p[:, -1]
         uncertainty = Uncertainty(
             simulations=n,
             seed=opts.seed,
             months=[
-                MonthBands(period=p.date(), revenue=rb[i], gross_profit=gb[i], opex=ob[i], net_income=nb[i])
+                MonthBands(period=p.date(), revenue=rb[i], gross_profit=gb[i], opex=ob[i], net_income=nb[i], cash=cb[i])
                 for i, p in enumerate(periods)
             ],
+            prob_cash_out=prob_cash_out,
+            runway=runway_band,
             totals={k: band(v) for k, v in totals.items()},
             prob_loss_month=round(float((ni_p < 0).any(axis=1).mean()), 4),
             prob_total_loss=round(float((totals["net_income"] < 0).mean()), 4),
@@ -377,6 +431,8 @@ def build(
             other_sd=round(prep.other_sd, 2),
             calibration=calibration,
         )
+        if ending_cash is not None:
+            totals["ending_cash"] = ending_cash
         sims = Sims(totals)
 
     resp = ForecastResponse(
@@ -389,17 +445,23 @@ def build(
         models=models,
         adjustments=adjustments,
         uncertainty=uncertainty,
+        opening_balance=opening_row,
+        balance_sheet=balance_sheet,
+        cash_flow=cash_flow,
+        cash=cash_summary,
         warnings=warnings,
     )
     return resp, sims
 
 
-def run_forecast(monthly: pd.DataFrame, request: ForecastRequest) -> ForecastResponse:
+def run_forecast(
+    monthly: pd.DataFrame, request: ForecastRequest, balances: pd.DataFrame | None = None
+) -> ForecastResponse:
     overridden = set(request.overrides.model_dump(exclude_none=True))
     # A line whose base or growth is overridden uses the driver formula, so
     # skip its backtest; scenario runs stay fast.
     skip = {line for line in LINES if overridden & {f"{line}_base", f"{line}_growth"}}
-    resp, _ = build(prepare(monthly, request, skip), request.overrides, request.adjustments)
+    resp, _ = build(prepare(monthly, request, skip, balances), request.overrides, request.adjustments)
     return resp
 
 
@@ -407,8 +469,10 @@ def _totals(resp: ForecastResponse, key: str) -> float:
     return sum(getattr(m, key) for m in resp.months)
 
 
-def run_scenarios(monthly: pd.DataFrame, request: ScenarioRequest) -> ScenarioComparison:
-    prep = prepare(monthly, request)
+def run_scenarios(
+    monthly: pd.DataFrame, request: ScenarioRequest, balances: pd.DataFrame | None = None
+) -> ScenarioComparison:
+    prep = prepare(monthly, request, balances=balances)
     baseline, base_sims = build(prep, DriverOverrides(), [])
     results = []
     for sc in request.scenarios:
@@ -418,10 +482,14 @@ def run_scenarios(monthly: pd.DataFrame, request: ScenarioRequest) -> ScenarioCo
             delta = ScenarioDelta(
                 revenue=band(sims.totals["revenue"] - base_sims.totals["revenue"]),
                 net_income=band(sims.totals["net_income"] - base_sims.totals["net_income"]),
+                ending_cash=band(sims.totals["ending_cash"] - base_sims.totals["ending_cash"])
+                if "ending_cash" in sims.totals else None,
             )
         delta_point = {
             k: round(_totals(resp, k) - _totals(baseline, k), 2)
             for k in ("revenue", "gross_profit", "opex", "net_income")
         }
+        if resp.cash and baseline.cash:
+            delta_point["ending_cash"] = round(resp.cash.ending_cash - baseline.cash.ending_cash, 2)
         results.append(ScenarioResult(name=sc.name, forecast=resp, delta=delta, delta_point=delta_point))
     return ScenarioComparison(engine_version=ENGINE_VERSION, baseline=baseline, scenarios=results)

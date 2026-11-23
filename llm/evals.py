@@ -11,6 +11,16 @@ from .schema import Interpretation
 
 EVALS = Path(__file__).with_name("evals.json")
 SAMPLE = Path(__file__).resolve().parent.parent / "sample_data" / "sample_financials.csv"
+SAMPLE_BALANCES = SAMPLE.with_name("sample_balances.csv")
+
+
+def sample_data():
+    """(monthly, balances) for the sample company the eval cases are written for."""
+    from engine import load_csv, to_monthly
+    from engine.ingest import to_balances
+
+    items = load_csv(SAMPLE) + load_csv(SAMPLE_BALANCES)
+    return to_monthly(items), to_balances(items)
 
 
 def load_cases() -> list[dict]:
@@ -87,11 +97,11 @@ def fake_transport(replies: dict[str, str] | None = None) -> httpx.MockTransport
     return httpx.MockTransport(handler)
 
 
-def run_case(case: dict, monthly, cfg) -> dict:
+def run_case(case: dict, monthly, cfg, balances=None) -> dict:
     from .interpret import interpret
 
     try:
-        interp, warnings, call = interpret(case["prompt"], monthly, cfg)
+        interp, warnings, call = interpret(case["prompt"], monthly, cfg, balances=balances)
         error = None
     except LLMError as e:
         interp, warnings, call, error = None, [], None, str(e)

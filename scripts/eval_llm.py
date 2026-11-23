@@ -12,9 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engine import load_csv, to_monthly  # noqa: E402
 from llm.client import LLMConfig  # noqa: E402
-from llm.evals import SAMPLE, fake_transport, load_cases, run_case  # noqa: E402
+from llm.evals import fake_transport, load_cases, run_case, sample_data  # noqa: E402
 
 
 def main():
@@ -30,11 +29,11 @@ def main():
     if not cfg.configured:
         sys.exit("Set LLM_BASE_URL and LLM_MODEL (or use --fake).")
 
-    monthly = to_monthly(load_csv(SAMPLE))
+    monthly, balances = sample_data()
     cases = [c for c in load_cases() if not args.only or c["id"] in args.only]
     results = []
     for c in cases:
-        r = run_case(c, monthly, cfg)
+        r = run_case(c, monthly, cfg, balances)
         results.append(r)
         mark = "PASS" if r["passed"] else "FAIL"
         lat = f"{r['latency_seconds']:.1f}s" if r["latency_seconds"] is not None else "-"

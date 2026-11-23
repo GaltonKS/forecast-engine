@@ -16,15 +16,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from engine import load_csv, to_monthly  # noqa: E402
 from llm.client import LLMBadOutput, LLMConfig, LLMNotConfigured, LLMUnavailable, chat_json  # noqa: E402
-from llm.evals import SAMPLE, check, fake_transport, load_cases, run_case  # noqa: E402
+from llm.evals import SAMPLE, check, fake_transport, load_cases, run_case, sample_data  # noqa: E402
 from llm.interpret import interpret  # noqa: E402
 from llm.prompt import build_context, messages, render_context  # noqa: E402
 from llm.schema import Interpretation, LLMOutput  # noqa: E402
 from llm.summary import fmt  # noqa: E402
 
 MONTHLY = to_monthly(load_csv(SAMPLE))
+MONTHLY_B, BALANCES = sample_data()
 CASES = {c["id"]: c for c in load_cases()}
-EMPTY_OV = dict(revenue_base=None, revenue_growth=None, gross_margin=None, opex_base=None, opex_growth=None, other_net=None)
+EMPTY_OV = dict(revenue_base=None, revenue_growth=None, gross_margin=None, opex_base=None, opex_growth=None, other_net=None,
+                dso_days=None, dio_days=None, dpo_days=None, capex_monthly=None, depreciation_monthly=None)
 
 
 def reply(content, finish="stop", status=200):
@@ -215,7 +217,8 @@ def test_timeout_and_unreachable():
 
 def test_ideal_replies_pass_every_eval_case():
     c = cfg(fake_transport())
-    failed = {cid: r["failures"] for cid, case in CASES.items() if not (r := run_case(case, MONTHLY, c))["passed"]}
+    failed = {cid: r["failures"] for cid, case in CASES.items()
+              if not (r := run_case(case, MONTHLY_B, c, BALANCES))["passed"]}
     assert failed == {}
 
 

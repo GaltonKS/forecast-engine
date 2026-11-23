@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from engine import ForecastRequest, ForecastResponse, run_forecast, to_monthly
+from engine.ingest import IngestError, to_balances
 from engine.forecast import run_scenarios
 from engine.schema import LineItem, ScenarioComparison, ScenarioRequest
 from llm.client import LLMConfig, LLMError
@@ -25,16 +26,30 @@ class NoData(ValueError):
     pass
 
 
-def load_monthly(db: Session, tenant_id: uuid.UUID):
+def _items(db: Session, tenant_id: uuid.UUID) -> list[LineItem]:
     rows = db.execute(
         select(Actual.period, Actual.amount, Account.name, Account.category)
         .join(Account, Account.id == Actual.account_id)
         .where(Actual.tenant_id == tenant_id)
     ).all()
-    if not rows:
+    return [LineItem(period=p, account=n, category=c, amount=float(a)) for p, a, n, c in rows]
+
+
+def load_monthly(db: Session, tenant_id: uuid.UUID):
+    """The tenant's income statement, one row per month."""
+    return load_financials(db, tenant_id)[0]
+
+
+def load_financials(db: Session, tenant_id: uuid.UUID):
+    """(monthly income statement, month-end balances or None)."""
+    items = _items(db, tenant_id)
+    if not items:
         raise NoData("No financial data uploaded for this tenant yet")
-    items = [LineItem(period=p, account=n, category=c, amount=float(a)) for p, a, n, c in rows]
-    return to_monthly(items)
+    try:
+        monthly = to_monthly(items)
+    except IngestError:
+        raise NoData("No income statement data uploaded yet (only balances)")
+    return monthly, to_balances(items)
 
 
 def llm_config() -> LLMConfig:
@@ -94,17 +109,17 @@ def execute_job(session_factory: sessionmaker, job_id: uuid.UUID) -> None:
             return  # unknown, finished, or already timed out
         job = db.get(Job, job_id)
         try:
-            monthly = load_monthly(db, job.tenant_id)
+            monthly, balances = load_financials(db, job.tenant_id)
             if job.kind == "forecast":
                 req = ForecastRequest.model_validate(job.request)
-                resp = run_forecast(monthly, req)
+                resp = run_forecast(monthly, req, balances)
                 record = save_forecast(db, job.tenant_id, req, resp)
                 result, forecast_id = resp.model_dump(mode="json"), record.id
             elif job.kind == "scenarios":
                 req = ScenarioRequest.model_validate(job.request)
-                result, forecast_id = run_scenarios(monthly, req).model_dump(mode="json"), None
+                result, forecast_id = run_scenarios(monthly, req, balances).model_dump(mode="json"), None
             elif job.kind == "query":
-                result, forecast_id = run_query(db, job.tenant_id, monthly, QueryRequest.model_validate(job.request)), None
+                result, forecast_id = run_query(db, job.tenant_id, monthly, balances, QueryRequest.model_validate(job.request)), None
             else:
                 raise ValueError(f"Unknown job kind '{job.kind}'")
         except LLMError as e:  # endpoint down, or the model's reply unusable
@@ -134,21 +149,21 @@ def execute_job(session_factory: sessionmaker, job_id: uuid.UUID) -> None:
         db.commit()
 
 
-def run_query(db: Session, tenant_id: uuid.UUID, monthly, req: QueryRequest) -> dict:
+def run_query(db: Session, tenant_id: uuid.UUID, monthly, balances, req: QueryRequest) -> dict:
     """Prompt -> scenarios (model) -> forecasts (engine) -> summary (code)."""
-    interp, warnings, call = interpret(req.prompt, monthly, llm_config(), req.horizon_months)
+    interp, warnings, call = interpret(req.prompt, monthly, llm_config(), req.horizon_months, balances)
     result = QueryResult(prompt=req.prompt, interpretation=interp, warnings=warnings, llm=call)
     if not req.run or interp.intent == "unsupported":
         return result.model_dump(mode="json")
 
     opts = dict(horizon_months=interp.horizon_months, simulations=req.simulations, seed=req.seed)
     if interp.scenarios:
-        comparison = run_scenarios(monthly, ScenarioRequest(scenarios=interp.scenarios, **opts))
+        comparison = run_scenarios(monthly, ScenarioRequest(scenarios=interp.scenarios, **opts), balances)
     else:  # baseline question
         from engine.forecast import ENGINE_VERSION
 
         comparison = ScenarioComparison(
-            engine_version=ENGINE_VERSION, baseline=run_forecast(monthly, ForecastRequest(**opts)), scenarios=[]
+            engine_version=ENGINE_VERSION, baseline=run_forecast(monthly, ForecastRequest(**opts), balances), scenarios=[]
         )
     # Each scenario is saved as a forecast, with the prompt that produced it.
     ids = []

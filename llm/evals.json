@@ -1,5 +1,5 @@
 {
- "about": "Prompt -> expected scenario cases for the LLM layer, on sample_data/sample_financials.csv (last actual 2025-12, first forecast month 2026-01). 'expect' is what the eval checks; 'ideal' is a reply that should pass, used by the tests' stand-in model. Run against a real endpoint with: python scripts/eval_llm.py",
+ "about": "Prompt -> expected scenario cases for the LLM layer, on sample_data/sample_financials.csv + sample_balances.csv (last actual 2025-12, first forecast month 2026-01). 'expect' is what the eval checks; 'ideal' is a reply that should pass, used by the tests' stand-in model. Run against a real endpoint with: python scripts/eval_llm.py",
  "cases": [
   {
    "id": "hire-annual-salary",
@@ -38,7 +38,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -90,7 +95,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -138,7 +148,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": []
      }
@@ -177,7 +192,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": []
      }
@@ -216,7 +236,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": []
      }
@@ -272,7 +297,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -293,7 +323,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -345,7 +380,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -397,7 +437,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -449,7 +494,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -497,7 +547,12 @@
        "gross_margin": 0.75,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": []
      }
@@ -542,7 +597,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -602,7 +662,12 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": [
        {
@@ -674,18 +739,18 @@
    }
   },
   {
-   "id": "no-data",
+   "id": "runway",
    "prompt": "How many months of cash runway do we have?",
    "expect": {
-    "intent": "unsupported"
+    "intent": "baseline"
    },
    "ideal": {
-    "intent": "unsupported",
-    "explanation": "Runway needs a cash balance.",
+    "intent": "baseline",
+    "explanation": "Runway is read from the baseline cash forecast.",
     "assumptions": [],
     "horizon_months": null,
     "scenarios": [],
-    "unsupported_reason": "The forecast has no cash balance, so runway can't be computed yet."
+    "unsupported_reason": null
    }
   },
   {
@@ -735,7 +800,245 @@
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
-       "other_net": null
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
+      },
+      "adjustments": []
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "equity-raise",
+   "prompt": "What if we raise 500k from investors in June?",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {},
+      "adjustments": [
+       {
+        "line": "equity",
+        "kind": "add",
+        "value": 500000,
+        "start": "2026-06",
+        "end": "2026-06",
+        "rel_tol": 0.01
+       }
+      ]
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "A 500k equity raise in June 2026.",
+    "assumptions": [],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "Raise 500k",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
+      },
+      "adjustments": [
+       {
+        "line": "equity",
+        "kind": "add",
+        "value": 500000,
+        "start": "2026-06",
+        "end": "2026-06",
+        "label": "Funding round"
+       }
+      ]
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "loan",
+   "prompt": "Take out a 200k loan in March and repay 10k a month from April",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {},
+      "adjustments": [
+       {
+        "line": "debt",
+        "kind": "add",
+        "value": 200000,
+        "start": "2026-03",
+        "end": "2026-03",
+        "rel_tol": 0.01
+       },
+       {
+        "line": "debt",
+        "kind": "add",
+        "value": -10000,
+        "start": "2026-04",
+        "end": null,
+        "rel_tol": 0.01
+       }
+      ]
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "Borrow 200k in March 2026, repay 10k/month from April.",
+    "assumptions": [
+     "Interest isn't included; add it to other expenses if needed"
+    ],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "200k loan",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
+      },
+      "adjustments": [
+       {
+        "line": "debt",
+        "kind": "add",
+        "value": 200000,
+        "start": "2026-03",
+        "end": "2026-03",
+        "label": "Loan drawn"
+       },
+       {
+        "line": "debt",
+        "kind": "add",
+        "value": -10000,
+        "start": "2026-04",
+        "end": null,
+        "label": "Repayments"
+       }
+      ]
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "equipment",
+   "prompt": "We're buying 80k of equipment in April",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {},
+      "adjustments": [
+       {
+        "line": "capex",
+        "kind": "add",
+        "value": 80000,
+        "start": "2026-04",
+        "end": "2026-04",
+        "rel_tol": 0.01
+       }
+      ]
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "A one-off 80k equipment purchase in April 2026.",
+    "assumptions": [],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "Equipment",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
+      },
+      "adjustments": [
+       {
+        "line": "capex",
+        "kind": "add",
+        "value": 80000,
+        "start": "2026-04",
+        "end": "2026-04",
+        "label": "Equipment purchase"
+       }
+      ]
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "payment-terms",
+   "prompt": "What if customers start taking 60 days to pay us?",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {
+       "dso_days": [
+        60,
+        0.5
+       ]
+      },
+      "adjustments": []
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "Customers pay in 60 days instead of about 30.",
+    "assumptions": [],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "60-day collections",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": 60,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null
       },
       "adjustments": []
      }

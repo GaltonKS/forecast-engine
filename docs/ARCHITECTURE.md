@@ -13,7 +13,7 @@
 | Key Value (Valkey) | Render | Celery job queue (`noeviction`, so queued jobs are never dropped) |
 | Celery worker | Render | Runs forecast jobs and calls the model |
 | Postgres | Render | Financial data, saved forecasts and their assumptions |
-| Forecast engine | Render (in the worker) | Driver model producing 3 statements; Prophet / ARIMA / LightGBM; Monte Carlo P10/P50/P90; backtest on recent months |
+| Forecast engine | Render (in the worker) | Driver model producing 3 statements (income, balance sheet, cash flow); Prophet / ARIMA / LightGBM; Monte Carlo P10/P50/P90; backtest on recent months |
 | Open model (vLLM) | GPU on Modal / RunPod | Turns a prompt into scenario JSON using guided JSON output |
 | Data sources | outside | QuickBooks, Xero, CSV and bank feeds, ingested into Postgres |
 
@@ -56,10 +56,11 @@ warnings, a code-written summary and the full comparison.
   company's 24-60 monthly values. It would lose to ETS/driver in the backtest
   and add a dependency. Worth revisiting with daily or weekly data, or pooled
   training across tenants.
-- **One statement, not three.** The engine produces an income statement only
-  (revenue → operating income → net income). The balance sheet and cash flow need
-  extra drivers (payment timing, capex, debt) and likely more categories than the
-  current four (`revenue`, `cogs`, `opex`, `other`).
+- **Three statements: in place.** Balance sheet and cash flow are projected
+  from the income statement with working-capital days, capex and depreciation
+  fitted from uploaded balances; cash runway comes with Monte Carlo ranges.
+  Not modelled yet: income tax, interest from the debt balance, depreciation
+  on new capex, and correlation between the uncertainty in revenue and costs.
 - **CSV only.** QuickBooks, Xero and bank feeds should each be a connector that
   outputs the same `LineItem` format, so the engine and API don't change.
 - **Model not deployed or chosen yet.** Everything around the model is built

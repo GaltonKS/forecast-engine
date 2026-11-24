@@ -1,5 +1,5 @@
 {
-  "engine_version": "0.3.0",
+  "engine_version": "0.4.0",
   "last_actual_period": "2025-12-01",
   "history_months": 24,
   "drivers": {
@@ -32,6 +32,31 @@
       "value": 403.8533333333333,
       "method": "Average net other income of the last 6 months",
       "overridden": false
+    },
+    "dso_days": {
+      "value": 30.40191112838716,
+      "method": "receivables / monthly revenue x 30.4 days, last 3 months with balances",
+      "overridden": false
+    },
+    "dio_days": {
+      "value": 0.0,
+      "method": "No inventory in the balance sheet",
+      "overridden": false
+    },
+    "dpo_days": {
+      "value": 19.57142446713324,
+      "method": "payables / monthly cash costs (cogs + opex - depreciation) x 30.4 days, last 3 months with balances",
+      "overridden": false
+    },
+    "capex_monthly": {
+      "value": 2000.0,
+      "method": "Change in fixed assets + depreciation, last 3 months with consecutive balances",
+      "overridden": false
+    },
+    "depreciation_monthly": {
+      "value": 0.0,
+      "method": "No depreciation in the income statement; tag depreciation accounts 'depreciation' to model it",
+      "overridden": false
     }
   },
   "formulas": {
@@ -41,7 +66,15 @@
     "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
     "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
     "net_income": "net_income[t] = operating_income[t] + other_net + adjustments",
-    "adjustments": "Each adjustment adds (currency/month) or scales (pct) its line from start through end"
+    "adjustments": "Each adjustment adds (currency/month) or scales (pct) its line from start through end",
+    "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
+    "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
+    "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
+    "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+    "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
+    "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
+    "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
+    "cash": "cash[t] = cash[t-1] + operating - capex + debt and equity raised"
   },
   "months": [
     {
@@ -236,6 +269,11 @@
           "p10": 56864.4,
           "p50": 62702.76,
           "p90": 68192.55
+        },
+        "cash": {
+          "p10": 784382.65,
+          "p50": 785996.7,
+          "p90": 787643.88
         }
       },
       {
@@ -259,6 +297,11 @@
           "p10": 59814.33,
           "p50": 65998.36,
           "p90": 71892.14
+        },
+        "cash": {
+          "p10": 840132.01,
+          "p50": 846500.93,
+          "p90": 852518.99
         }
       },
       {
@@ -282,6 +325,11 @@
           "p10": 33804.98,
           "p50": 39400.24,
           "p90": 45425.35
+        },
+        "cash": {
+          "p10": 889284.22,
+          "p50": 899568.07,
+          "p90": 909259.74
         }
       },
       {
@@ -305,6 +353,11 @@
           "p10": 36429.49,
           "p50": 43043.13,
           "p90": 49087.01
+        },
+        "cash": {
+          "p10": 923229.88,
+          "p50": 936800.32,
+          "p90": 949888.63
         }
       },
       {
@@ -328,6 +381,11 @@
           "p10": 40448.43,
           "p50": 46662.36,
           "p90": 52580.2
+        },
+        "cash": {
+          "p10": 960315.82,
+          "p50": 977922.7,
+          "p90": 992947.83
         }
       },
       {
@@ -351,6 +409,11 @@
           "p10": 43650.82,
           "p50": 49743.66,
           "p90": 55910.12
+        },
+        "cash": {
+          "p10": 1000851.3,
+          "p50": 1022218.1,
+          "p90": 1041048.14
         }
       },
       {
@@ -374,6 +437,11 @@
           "p10": 47167.67,
           "p50": 53492.42,
           "p90": 59596.97
+        },
+        "cash": {
+          "p10": 1045778.23,
+          "p50": 1069593.65,
+          "p90": 1091540.56
         }
       },
       {
@@ -397,6 +465,11 @@
           "p10": 50929.49,
           "p50": 57097.56,
           "p90": 63053.95
+        },
+        "cash": {
+          "p10": 1093408.27,
+          "p50": 1120281.71,
+          "p90": 1146102.5
         }
       },
       {
@@ -420,6 +493,11 @@
           "p10": 54610.17,
           "p50": 60857.84,
           "p90": 66973.23
+        },
+        "cash": {
+          "p10": 1145996.91,
+          "p50": 1175088.15,
+          "p90": 1203264.16
         }
       },
       {
@@ -443,6 +521,11 @@
           "p10": 58236.73,
           "p50": 64775.6,
           "p90": 71321.43
+        },
+        "cash": {
+          "p10": 1202355.37,
+          "p50": 1233916.9,
+          "p90": 1265847.92
         }
       },
       {
@@ -466,6 +549,11 @@
           "p10": 62264.25,
           "p50": 68910.87,
           "p90": 75348.56
+        },
+        "cash": {
+          "p10": 1261552.13,
+          "p50": 1296868.07,
+          "p90": 1331554.29
         }
       },
       {
@@ -489,6 +577,11 @@
           "p10": 66647.25,
           "p50": 72782.36,
           "p90": 78970.06
+        },
+        "cash": {
+          "p10": 1324505.07,
+          "p50": 1363456.64,
+          "p90": 1402616.52
         }
       }
     ],
@@ -516,6 +609,12 @@
     },
     "prob_loss_month": 0.0,
     "prob_total_loss": 0.0,
+    "prob_cash_out": 0.0,
+    "runway": {
+      "p10": null,
+      "p50": null,
+      "p90": null
+    },
     "noise": {
       "revenue": {
         "scale": "log",
@@ -551,6 +650,406 @@
       }
     },
     "method": "Each path multiplies the point forecast by noise fitted to history: a starting-level error, a growth-rate error that compounds, and month-to-month AR(1) noise. Gross margin and other income vary around their fitted values. Lines are simulated independently. Ranges are widened, never narrowed, when the backtest shows they caught fewer than 80% of actual months."
+  },
+  "opening_balance": {
+    "period": "2025-12-01",
+    "cash": 720708.19,
+    "receivables": 204078.4,
+    "inventory": 0.0,
+    "fixed_assets": 166000.0,
+    "other_assets": 20000.0,
+    "total_assets": 1110786.59,
+    "payables": 88526.24,
+    "debt": 150000.0,
+    "other_liability": 30000.0,
+    "total_liabilities": 268526.24,
+    "equity": 842260.35,
+    "check": 0.0
+  },
+  "balance_sheet": [
+    {
+      "period": "2026-01-01",
+      "cash": 786116.09,
+      "receivables": 198843.87,
+      "inventory": 0.0,
+      "fixed_assets": 168000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1172959.96,
+      "payables": 87784.54,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 267784.54,
+      "equity": 905175.41,
+      "check": 0.0
+    },
+    {
+      "period": "2026-02-01",
+      "cash": 846788.48,
+      "receivables": 202820.75,
+      "inventory": 0.0,
+      "fixed_assets": 170000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1239609.23,
+      "payables": 88225.94,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 268225.94,
+      "equity": 971383.29,
+      "check": 0.0
+    },
+    {
+      "period": "2026-03-01",
+      "cash": 900052.16,
+      "receivables": 206877.16,
+      "inventory": 0.0,
+      "fixed_assets": 172000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1298929.33,
+      "payables": 107979.49,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 287979.49,
+      "equity": 1010949.84,
+      "check": 0.0
+    },
+    {
+      "period": "2026-04-01",
+      "cash": 937366.24,
+      "receivables": 211014.71,
+      "inventory": 0.0,
+      "fixed_assets": 174000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1342380.95,
+      "payables": 108438.73,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 288438.73,
+      "equity": 1053942.22,
+      "check": 0.0
+    },
+    {
+      "period": "2026-05-01",
+      "cash": 978101.11,
+      "receivables": 215235.0,
+      "inventory": 0.0,
+      "fixed_assets": 176000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1389336.11,
+      "payables": 108907.14,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 288907.14,
+      "equity": 1100428.97,
+      "check": 0.0
+    },
+    {
+      "period": "2026-06-01",
+      "cash": 1022325.18,
+      "receivables": 219539.7,
+      "inventory": 0.0,
+      "fixed_assets": 178000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1439864.89,
+      "payables": 109384.93,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 289384.93,
+      "equity": 1150479.96,
+      "check": 0.0
+    },
+    {
+      "period": "2026-07-01",
+      "cash": 1070108.25,
+      "receivables": 223930.49,
+      "inventory": 0.0,
+      "fixed_assets": 180000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1494038.75,
+      "payables": 109872.27,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 289872.27,
+      "equity": 1204166.48,
+      "check": 0.0
+    },
+    {
+      "period": "2026-08-01",
+      "cash": 1121521.5,
+      "receivables": 228409.1,
+      "inventory": 0.0,
+      "fixed_assets": 182000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1551930.6,
+      "payables": 110369.36,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 290369.36,
+      "equity": 1261561.24,
+      "check": 0.0
+    },
+    {
+      "period": "2026-09-01",
+      "cash": 1176637.51,
+      "receivables": 232977.29,
+      "inventory": 0.0,
+      "fixed_assets": 184000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1613614.8,
+      "payables": 110876.38,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 290876.38,
+      "equity": 1322738.41,
+      "check": 0.0
+    },
+    {
+      "period": "2026-10-01",
+      "cash": 1235530.36,
+      "receivables": 237636.83,
+      "inventory": 0.0,
+      "fixed_assets": 186000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1679167.19,
+      "payables": 111393.55,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 291393.55,
+      "equity": 1387773.64,
+      "check": 0.0
+    },
+    {
+      "period": "2026-11-01",
+      "cash": 1298275.58,
+      "receivables": 242389.57,
+      "inventory": 0.0,
+      "fixed_assets": 188000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1748665.15,
+      "payables": 111921.07,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 291921.07,
+      "equity": 1456744.08,
+      "check": 0.0
+    },
+    {
+      "period": "2026-12-01",
+      "cash": 1364950.21,
+      "receivables": 247237.36,
+      "inventory": 0.0,
+      "fixed_assets": 190000.0,
+      "other_assets": 20000.0,
+      "total_assets": 1822187.57,
+      "payables": 112459.13,
+      "debt": 150000.0,
+      "other_liability": 30000.0,
+      "total_liabilities": 292459.13,
+      "equity": 1529728.44,
+      "check": 0.0
+    }
+  ],
+  "cash_flow": [
+    {
+      "period": "2026-01-01",
+      "net_income": 62915.06,
+      "depreciation": 0.0,
+      "change_receivables": 5234.53,
+      "change_inventory": 0.0,
+      "change_payables": -741.7,
+      "operating": 67407.9,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 65407.9,
+      "ending_cash": 786116.09
+    },
+    {
+      "period": "2026-02-01",
+      "net_income": 66207.88,
+      "depreciation": 0.0,
+      "change_receivables": -3976.88,
+      "change_inventory": 0.0,
+      "change_payables": 441.4,
+      "operating": 62672.4,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 60672.4,
+      "ending_cash": 846788.48
+    },
+    {
+      "period": "2026-03-01",
+      "net_income": 39566.54,
+      "depreciation": 0.0,
+      "change_receivables": -4056.41,
+      "change_inventory": 0.0,
+      "change_payables": 19753.55,
+      "operating": 55263.68,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 53263.68,
+      "ending_cash": 900052.16
+    },
+    {
+      "period": "2026-04-01",
+      "net_income": 42992.39,
+      "depreciation": 0.0,
+      "change_receivables": -4137.54,
+      "change_inventory": 0.0,
+      "change_payables": 459.23,
+      "operating": 39314.08,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 37314.08,
+      "ending_cash": 937366.24
+    },
+    {
+      "period": "2026-05-01",
+      "net_income": 46486.75,
+      "depreciation": 0.0,
+      "change_receivables": -4220.29,
+      "change_inventory": 0.0,
+      "change_payables": 468.42,
+      "operating": 42734.87,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 40734.87,
+      "ending_cash": 978101.11
+    },
+    {
+      "period": "2026-06-01",
+      "net_income": 50050.99,
+      "depreciation": 0.0,
+      "change_receivables": -4304.7,
+      "change_inventory": 0.0,
+      "change_payables": 477.79,
+      "operating": 46224.08,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 44224.08,
+      "ending_cash": 1022325.18
+    },
+    {
+      "period": "2026-07-01",
+      "net_income": 53686.52,
+      "depreciation": 0.0,
+      "change_receivables": -4390.79,
+      "change_inventory": 0.0,
+      "change_payables": 487.34,
+      "operating": 49783.07,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 47783.07,
+      "ending_cash": 1070108.25
+    },
+    {
+      "period": "2026-08-01",
+      "net_income": 57394.76,
+      "depreciation": 0.0,
+      "change_receivables": -4478.61,
+      "change_inventory": 0.0,
+      "change_payables": 497.09,
+      "operating": 53413.24,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 51413.24,
+      "ending_cash": 1121521.5
+    },
+    {
+      "period": "2026-09-01",
+      "net_income": 61177.17,
+      "depreciation": 0.0,
+      "change_receivables": -4568.18,
+      "change_inventory": 0.0,
+      "change_payables": 507.03,
+      "operating": 57116.02,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 55116.02,
+      "ending_cash": 1176637.51
+    },
+    {
+      "period": "2026-10-01",
+      "net_income": 65035.22,
+      "depreciation": 0.0,
+      "change_receivables": -4659.55,
+      "change_inventory": 0.0,
+      "change_payables": 517.17,
+      "operating": 60892.85,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 58892.85,
+      "ending_cash": 1235530.36
+    },
+    {
+      "period": "2026-11-01",
+      "net_income": 68970.44,
+      "depreciation": 0.0,
+      "change_receivables": -4752.74,
+      "change_inventory": 0.0,
+      "change_payables": 527.51,
+      "operating": 64745.22,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 62745.22,
+      "ending_cash": 1298275.58
+    },
+    {
+      "period": "2026-12-01",
+      "net_income": 72984.36,
+      "depreciation": 0.0,
+      "change_receivables": -4847.79,
+      "change_inventory": 0.0,
+      "change_payables": 538.06,
+      "operating": 68674.63,
+      "capex": -2000.0,
+      "investing": -2000.0,
+      "debt": 0.0,
+      "equity": 0.0,
+      "financing": 0.0,
+      "net_change": 66674.63,
+      "ending_cash": 1364950.21
+    }
+  ],
+  "cash": {
+    "opening_cash": 720708.19,
+    "ending_cash": 1364950.21,
+    "lowest_cash": 786116.09,
+    "lowest_cash_period": "2026-01-01",
+    "cash_out_period": null,
+    "runway_months": null,
+    "note": "Cash stays positive through 2026-12."
   },
   "warnings": []
 }

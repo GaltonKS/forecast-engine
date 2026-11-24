@@ -31,7 +31,7 @@ from llm.schema import QueryRequest
 from .config import Settings
 from . import jobs as jobs_mod
 from .jobs import NoData, execute_job, expire_stale_jobs, save_forecast
-from .jobs import load_monthly as _load_monthly
+from .jobs import load_financials as _load_financials
 from .models import Account, Actual, Base, Forecast, Job, Tenant
 
 log = logging.getLogger("forecast_api")
@@ -53,10 +53,31 @@ class UploadSummary(BaseModel):
     rows_received: int
     accounts: int
     new_accounts: int
+    # income statement (null if only balances have been uploaded so far)
     months_in_history: int
-    history_start: date
-    history_end: date
+    history_start: date | None = None
+    history_end: date | None = None
     gaps: list[str]
+    # balance sheet
+    balance_months: int = 0
+    balances_end: date | None = None
+    balance_sheet_ready: bool = False  # balances exist for the last income statement month
+    note: str | None = None
+
+
+class BalanceRow(BaseModel):
+    period: date
+    cash: float
+    receivables: float
+    inventory: float
+    fixed_assets: float
+    other_assets: float
+    total_assets: float
+    payables: float
+    debt: float
+    other_liability: float
+    total_liabilities: float
+    equity: float
 
 
 class MonthlyRow(BaseModel):
@@ -156,11 +177,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
 
-    def load_monthly(db: Session, tenant_id: uuid.UUID):
+    def load_financials(db: Session, tenant_id: uuid.UUID):
         try:
-            return _load_monthly(db, tenant_id)
+            return _load_financials(db, tenant_id)
         except NoData as e:
             raise HTTPException(status_code=422, detail=str(e))
+
+    def load_monthly(db: Session, tenant_id: uuid.UUID):
+        return load_financials(db, tenant_id)[0]
 
     job_timeout = timedelta(minutes=settings.job_timeout_minutes)
     celery = None
@@ -266,16 +290,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         db.commit()
 
-        monthly = load_monthly(db, tenant.id)
+        try:
+            monthly, balances = _load_financials(db, tenant.id)
+        except NoData:
+            monthly, balances = None, None
+            from .jobs import _items
+            from engine.ingest import to_balances
+
+            balances = to_balances(_items(db, tenant.id))
+        last = monthly.index.max() if monthly is not None else None
+        ready = bool(balances is not None and last is not None and last in balances.index)
+        note = None
+        if monthly is None:
+            note = "Balances saved. Upload the income statement (revenue, cogs, opex, other) to forecast."
+        elif balances is None:
+            note = (f"Add month-end balances for {last:%Y-%m} (cash, receivables, payables, debt, ...) "
+                    "to get the balance sheet, cash flow and runway.")
+        elif not ready:
+            note = f"Balances end {balances.index.max():%Y-%m}; add {last:%Y-%m} to get the balance sheet and cash flow."
         return UploadSummary(
             rows_received=len(items),
             accounts=len(categories),
             new_accounts=new_accounts,
-            months_in_history=len(monthly),
-            history_start=monthly.index.min().date(),
-            history_end=monthly.index.max().date(),
-            gaps=monthly.attrs.get("gaps", []),
+            months_in_history=len(monthly) if monthly is not None else 0,
+            history_start=monthly.index.min().date() if monthly is not None else None,
+            history_end=last.date() if last is not None else None,
+            gaps=monthly.attrs.get("gaps", []) if monthly is not None else [],
+            balance_months=0 if balances is None else len(balances),
+            balances_end=None if balances is None else balances.index.max().date(),
+            balance_sheet_ready=ready,
+            note=note,
         )
+
+    @app.get("/tenants/{tenant_id}/actuals/balances", response_model=list[BalanceRow], dependencies=auth)
+    def balance_history(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)):
+        """Month-end balances as uploaded, with totals. Equity is as reported."""
+        from .jobs import _items
+        from engine.ingest import to_balances
+        from engine.schema import ASSET_CATEGORIES, LIABILITY_CATEGORIES
+
+        b = to_balances(_items(db, tenant.id))
+        if b is None:
+            return []
+        return [
+            BalanceRow(
+                period=idx.date(), **{c: float(r[c]) for c in b.columns},
+                total_assets=round(float(sum(r[c] for c in ASSET_CATEGORIES)), 2),
+                total_liabilities=round(float(sum(r[c] for c in LIABILITY_CATEGORIES)), 2),
+            )
+            for idx, r in b.iterrows()
+        ]
 
     @app.get("/tenants/{tenant_id}/actuals/monthly", response_model=list[MonthlyRow], dependencies=auth)
     def monthly_actuals(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)):
@@ -304,9 +368,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         (see `models` in the response). Send overrides to model a scenario, e.g.
         {"horizon_months": 12, "overrides": {"revenue_growth": 0.02}}, or force a
         model with {"method": "ets"}."""
-        monthly = load_monthly(db, tenant.id)
+        monthly, balances = load_financials(db, tenant.id)
         try:
-            resp = run_forecast(monthly, body)
+            resp = run_forecast(monthly, body, balances)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
         record = save_forecast(db, tenant.id, body, resp)

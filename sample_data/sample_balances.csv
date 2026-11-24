@@ -1,0 +1,193 @@
+period,account,category,amount
+2024-01-01,Bank accounts,cash,180000.0
+2024-01-01,Accounts receivable,receivables,91394.21
+2024-01-01,Equipment (net),fixed_assets,120000.0
+2024-01-01,Deposits,other_assets,20000.0
+2024-01-01,Accounts payable,payables,58437.4
+2024-01-01,Term loan,debt,150000.0
+2024-01-01,Accrued expenses,other_liability,30000.0
+2024-01-01,Shareholders' equity,equity,172956.8
+2024-02-01,Bank accounts,cash,177860.39
+2024-02-01,Accounts receivable,receivables,98137.35
+2024-02-01,Equipment (net),fixed_assets,122000.0
+2024-02-01,Deposits,other_assets,20000.0
+2024-02-01,Accounts payable,payables,58545.27
+2024-02-01,Term loan,debt,150000.0
+2024-02-01,Accrued expenses,other_liability,30000.0
+2024-02-01,Shareholders' equity,equity,179452.47
+2024-03-01,Bank accounts,cash,185206.46
+2024-03-01,Accounts receivable,receivables,101693.25
+2024-03-01,Equipment (net),fixed_assets,124000.0
+2024-03-01,Deposits,other_assets,20000.0
+2024-03-01,Accounts payable,payables,62973.84
+2024-03-01,Term loan,debt,150000.0
+2024-03-01,Accrued expenses,other_liability,30000.0
+2024-03-01,Shareholders' equity,equity,187925.87
+2024-04-01,Bank accounts,cash,194519.41
+2024-04-01,Accounts receivable,receivables,96549.03
+2024-04-01,Equipment (net),fixed_assets,126000.0
+2024-04-01,Deposits,other_assets,20000.0
+2024-04-01,Accounts payable,payables,62289.35
+2024-04-01,Term loan,debt,150000.0
+2024-04-01,Accrued expenses,other_liability,30000.0
+2024-04-01,Shareholders' equity,equity,194779.09
+2024-05-01,Bank accounts,cash,196513.14
+2024-05-01,Accounts receivable,receivables,106214.56
+2024-05-01,Equipment (net),fixed_assets,128000.0
+2024-05-01,Deposits,other_assets,20000.0
+2024-05-01,Accounts payable,payables,64420.79
+2024-05-01,Term loan,debt,150000.0
+2024-05-01,Accrued expenses,other_liability,30000.0
+2024-05-01,Shareholders' equity,equity,206306.91
+2024-06-01,Bank accounts,cash,207711.62
+2024-06-01,Accounts receivable,receivables,103977.84
+2024-06-01,Equipment (net),fixed_assets,130000.0
+2024-06-01,Deposits,other_assets,20000.0
+2024-06-01,Accounts payable,payables,63327.11
+2024-06-01,Term loan,debt,150000.0
+2024-06-01,Accrued expenses,other_liability,30000.0
+2024-06-01,Shareholders' equity,equity,218362.35
+2024-07-01,Bank accounts,cash,221144.16
+2024-07-01,Accounts receivable,receivables,108726.73
+2024-07-01,Equipment (net),fixed_assets,132000.0
+2024-07-01,Deposits,other_assets,20000.0
+2024-07-01,Accounts payable,payables,66994.31
+2024-07-01,Term loan,debt,150000.0
+2024-07-01,Accrued expenses,other_liability,30000.0
+2024-07-01,Shareholders' equity,equity,234876.58
+2024-08-01,Bank accounts,cash,222205.71
+2024-08-01,Accounts receivable,receivables,116213.3
+2024-08-01,Equipment (net),fixed_assets,134000.0
+2024-08-01,Deposits,other_assets,20000.0
+2024-08-01,Accounts payable,payables,64751.5
+2024-08-01,Term loan,debt,150000.0
+2024-08-01,Accrued expenses,other_liability,30000.0
+2024-08-01,Shareholders' equity,equity,247667.51
+2024-09-01,Bank accounts,cash,236108.08
+2024-09-01,Accounts receivable,receivables,126079.56
+2024-09-01,Equipment (net),fixed_assets,136000.0
+2024-09-01,Deposits,other_assets,20000.0
+2024-09-01,Accounts payable,payables,70238.03
+2024-09-01,Term loan,debt,150000.0
+2024-09-01,Accrued expenses,other_liability,30000.0
+2024-09-01,Shareholders' equity,equity,267949.61
+2024-10-01,Bank accounts,cash,255509.93
+2024-10-01,Accounts receivable,receivables,128207.26
+2024-10-01,Equipment (net),fixed_assets,138000.0
+2024-10-01,Deposits,other_assets,20000.0
+2024-10-01,Accounts payable,payables,68820.56
+2024-10-01,Term loan,debt,150000.0
+2024-10-01,Accrued expenses,other_liability,30000.0
+2024-10-01,Shareholders' equity,equity,292896.63
+2024-11-01,Bank accounts,cash,279759.78
+2024-11-01,Accounts receivable,receivables,119922.97
+2024-11-01,Equipment (net),fixed_assets,140000.0
+2024-11-01,Deposits,other_assets,20000.0
+2024-11-01,Accounts payable,payables,66063.78
+2024-11-01,Term loan,debt,150000.0
+2024-11-01,Accrued expenses,other_liability,30000.0
+2024-11-01,Shareholders' equity,equity,313618.96
+2024-12-01,Bank accounts,cash,293070.67
+2024-12-01,Accounts receivable,receivables,129001.78
+2024-12-01,Equipment (net),fixed_assets,142000.0
+2024-12-01,Deposits,other_assets,20000.0
+2024-12-01,Accounts payable,payables,68312.96
+2024-12-01,Term loan,debt,150000.0
+2024-12-01,Accrued expenses,other_liability,30000.0
+2024-12-01,Shareholders' equity,equity,335759.48
+2025-01-01,Bank accounts,cash,318704.47
+2025-01-01,Accounts receivable,receivables,131952.54
+2025-01-01,Equipment (net),fixed_assets,144000.0
+2025-01-01,Deposits,other_assets,20000.0
+2025-01-01,Accounts payable,payables,70509.34
+2025-01-01,Term loan,debt,150000.0
+2025-01-01,Accrued expenses,other_liability,30000.0
+2025-01-01,Shareholders' equity,equity,364147.67
+2025-02-01,Bank accounts,cash,347705.15
+2025-02-01,Accounts receivable,receivables,133517.44
+2025-02-01,Equipment (net),fixed_assets,146000.0
+2025-02-01,Deposits,other_assets,20000.0
+2025-02-01,Accounts payable,payables,74818.02
+2025-02-01,Term loan,debt,150000.0
+2025-02-01,Accrued expenses,other_liability,30000.0
+2025-02-01,Shareholders' equity,equity,392404.57
+2025-03-01,Bank accounts,cash,370049.49
+2025-03-01,Accounts receivable,receivables,144382.48
+2025-03-01,Equipment (net),fixed_assets,148000.0
+2025-03-01,Deposits,other_assets,20000.0
+2025-03-01,Accounts payable,payables,80020.53
+2025-03-01,Term loan,debt,150000.0
+2025-03-01,Accrued expenses,other_liability,30000.0
+2025-03-01,Shareholders' equity,equity,422411.43
+2025-04-01,Bank accounts,cash,396378.56
+2025-04-01,Accounts receivable,receivables,148450.62
+2025-04-01,Equipment (net),fixed_assets,150000.0
+2025-04-01,Deposits,other_assets,20000.0
+2025-04-01,Accounts payable,payables,76419.49
+2025-04-01,Term loan,debt,150000.0
+2025-04-01,Accrued expenses,other_liability,30000.0
+2025-04-01,Shareholders' equity,equity,458409.68
+2025-05-01,Bank accounts,cash,430594.25
+2025-05-01,Accounts receivable,receivables,151297.56
+2025-05-01,Equipment (net),fixed_assets,152000.0
+2025-05-01,Deposits,other_assets,20000.0
+2025-05-01,Accounts payable,payables,77207.48
+2025-05-01,Term loan,debt,150000.0
+2025-05-01,Accrued expenses,other_liability,30000.0
+2025-05-01,Shareholders' equity,equity,496684.32
+2025-06-01,Bank accounts,cash,462174.59
+2025-06-01,Accounts receivable,receivables,158188.22
+2025-06-01,Equipment (net),fixed_assets,154000.0
+2025-06-01,Deposits,other_assets,20000.0
+2025-06-01,Accounts payable,payables,78895.96
+2025-06-01,Term loan,debt,150000.0
+2025-06-01,Accrued expenses,other_liability,30000.0
+2025-06-01,Shareholders' equity,equity,535466.85
+2025-07-01,Bank accounts,cash,495407.88
+2025-07-01,Accounts receivable,receivables,172060.43
+2025-07-01,Equipment (net),fixed_assets,156000.0
+2025-07-01,Deposits,other_assets,20000.0
+2025-07-01,Accounts payable,payables,85889.72
+2025-07-01,Term loan,debt,150000.0
+2025-07-01,Accrued expenses,other_liability,30000.0
+2025-07-01,Shareholders' equity,equity,577578.58
+2025-08-01,Bank accounts,cash,535092.19
+2025-08-01,Accounts receivable,receivables,172514.28
+2025-08-01,Equipment (net),fixed_assets,158000.0
+2025-08-01,Deposits,other_assets,20000.0
+2025-08-01,Accounts payable,payables,84811.14
+2025-08-01,Term loan,debt,150000.0
+2025-08-01,Accrued expenses,other_liability,30000.0
+2025-08-01,Shareholders' equity,equity,620795.32
+2025-09-01,Bank accounts,cash,580999.13
+2025-09-01,Accounts receivable,receivables,175875.61
+2025-09-01,Equipment (net),fixed_assets,160000.0
+2025-09-01,Deposits,other_assets,20000.0
+2025-09-01,Accounts payable,payables,81702.91
+2025-09-01,Term loan,debt,150000.0
+2025-09-01,Accrued expenses,other_liability,30000.0
+2025-09-01,Shareholders' equity,equity,675171.83
+2025-10-01,Bank accounts,cash,630120.86
+2025-10-01,Accounts receivable,receivables,174303.23
+2025-10-01,Equipment (net),fixed_assets,162000.0
+2025-10-01,Deposits,other_assets,20000.0
+2025-10-01,Accounts payable,payables,84344.58
+2025-10-01,Term loan,debt,150000.0
+2025-10-01,Accrued expenses,other_liability,30000.0
+2025-10-01,Shareholders' equity,equity,722079.51
+2025-11-01,Bank accounts,cash,670465.07
+2025-11-01,Accounts receivable,receivables,188804.69
+2025-11-01,Equipment (net),fixed_assets,164000.0
+2025-11-01,Deposits,other_assets,20000.0
+2025-11-01,Accounts payable,payables,85201.16
+2025-11-01,Term loan,debt,150000.0
+2025-11-01,Accrued expenses,other_liability,30000.0
+2025-11-01,Shareholders' equity,equity,778068.6
+2025-12-01,Bank accounts,cash,720708.19
+2025-12-01,Accounts receivable,receivables,204078.4
+2025-12-01,Equipment (net),fixed_assets,166000.0
+2025-12-01,Deposits,other_assets,20000.0
+2025-12-01,Accounts payable,payables,88526.24
+2025-12-01,Term loan,debt,150000.0
+2025-12-01,Accrued expenses,other_liability,30000.0
+2025-12-01,Shareholders' equity,equity,842260.35

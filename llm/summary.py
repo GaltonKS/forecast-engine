@@ -45,6 +45,8 @@ def summarize(c: ScenarioComparison) -> list[str]:
         ni = sum(m.net_income for m in base.months)
         lines.append(f"Baseline, next {h} months: revenue {fmt(rev)}, net income {fmt(ni)}.")
 
+    lines += _cash_lines("Baseline", base)
+
     for sc in c.scenarios:
         if sc.delta:
             lines.append(
@@ -56,7 +58,34 @@ def summarize(c: ScenarioComparison) -> list[str]:
                 f"{sc.name}: net income {fmt(sc.delta_point['net_income'], signed=True)} vs baseline; "
                 f"{_rev(sc.delta_point['revenue'])}."
             )
+        if sc.delta and sc.delta.ending_cash:
+            lines.append(f"{sc.name}: ending cash {_band(sc.delta.ending_cash, signed=True)} vs baseline.")
+        elif "ending_cash" in sc.delta_point:
+            lines.append(f"{sc.name}: ending cash {fmt(sc.delta_point['ending_cash'], signed=True)} vs baseline.")
+        lines += [line for line in _cash_lines(sc.name, sc.forecast) if "runs out" in line or "chance" in line]
         su = sc.forecast.uncertainty
         if su and su.prob_loss_month >= 0.05 and (not u or su.prob_loss_month > u.prob_loss_month + 0.05):
             lines.append(f"{sc.name}: {su.prob_loss_month:.0%} chance of at least one loss-making month.")
     return lines
+
+
+def _cash_lines(name: str, f) -> list[str]:
+    if not f.cash:
+        return []
+    c, u = f.cash, f.uncertainty
+    out = []
+    if c.cash_out_period:
+        out.append(f"{name}: cash runs out in {c.cash_out_period:%Y-%m} ({c.runway_months} months).")
+    else:
+        out.append(
+            f"{name}: cash goes from {fmt(c.opening_cash)} to {fmt(c.ending_cash)}; "
+            f"lowest {fmt(c.lowest_cash)} in {c.lowest_cash_period:%Y-%m}."
+        )
+    if u and u.prob_cash_out is not None and u.prob_cash_out >= 0.05:
+        r = u.runway
+        span = ""
+        if r and r.p10 is not None:
+            p90 = f"{r.p90} months" if r.p90 is not None else "beyond the forecast"
+            span = f" (runway {r.p10} months in a bad case, {p90} in a good one)"
+        out.append(f"{name}: {u.prob_cash_out:.0%} chance cash runs out within {len(f.months)} months{span}.")
+    return out

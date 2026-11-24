@@ -14,6 +14,7 @@ from app.models import Base  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 
 SAMPLE = ROOT / "sample_data" / "sample_financials.csv"
+BALANCES = ROOT / "sample_data" / "sample_balances.csv"
 KEY = "test-key"
 H = {"Authorization": f"Bearer {KEY}"}
 
@@ -353,9 +354,9 @@ def test_query_baseline_and_horizon(client, tenant, fake_llm):
 
 def test_query_unsupported_and_interpret_only(client, tenant, fake_llm):
     upload(client, tenant, SAMPLE.read_bytes())
-    res = ask(client, tenant, "How many months of cash runway do we have?")["result"]
+    res = ask(client, tenant, "Write me a poem about our finances")["result"]
     assert res["interpretation"]["intent"] == "unsupported" and res["comparison"] is None
-    assert "cash balance" in res["interpretation"]["unsupported_reason"]
+    assert "poem" in res["interpretation"]["unsupported_reason"]
     res = ask(client, tenant, "Raise prices 5% starting in April", run=False)["result"]
     assert res["interpretation"]["scenarios"][0]["adjustments"][0]["value"] == 0.05
     assert res["comparison"] is None and res["forecast_ids"] == []
@@ -380,3 +381,66 @@ def test_query_warnings_reach_the_caller(client, tenant, fake_llm):
 def test_query_prompt_limits(client, tenant, fake_llm):
     assert client.post(f"/tenants/{tenant}/query", json={"prompt": ""}, headers=H).status_code == 422
     assert client.post(f"/tenants/{tenant}/query", json={"prompt": "x" * 2001}, headers=H).status_code == 422
+
+
+# ---------- balance sheet, cash flow, runway ----------
+
+def test_balances_upload_in_either_order(client, tenant):
+    r = upload(client, tenant, BALANCES.read_bytes()).json()
+    assert r["months_in_history"] == 0 and r["balance_months"] == 24 and not r["balance_sheet_ready"]
+    assert "Upload the income statement" in r["note"]
+    r = upload(client, tenant, SAMPLE.read_bytes()).json()
+    assert r["balance_sheet_ready"] and r["balances_end"] == "2025-12-01" and r["note"] is None
+    rows = client.get(f"/tenants/{tenant}/actuals/balances", headers=H).json()
+    assert len(rows) == 24 and rows[-1]["cash"] == 720708.19
+    assert rows[-1]["total_assets"] == pytest.approx(rows[-1]["total_liabilities"] + rows[-1]["equity"], abs=0.02)
+    # balance rows don't leak into the income statement history
+    monthly = client.get(f"/tenants/{tenant}/actuals/monthly", headers=H).json()
+    assert len(monthly) == 24 and "cash" not in monthly[0]
+
+
+def test_income_statement_only_upload_says_what_to_add(client, tenant):
+    r = upload(client, tenant, SAMPLE.read_bytes()).json()
+    assert not r["balance_sheet_ready"] and "Add month-end balances for 2025-12" in r["note"]
+
+
+def test_forecast_includes_three_statements(client, tenant):
+    upload(client, tenant, SAMPLE.read_bytes())
+    upload(client, tenant, BALANCES.read_bytes())
+    f = client.post(f"/tenants/{tenant}/forecasts", json={"horizon_months": 6, "simulations": 200}, headers=H).json()
+    assert f["opening_balance"]["cash"] == 720708.19
+    assert len(f["balance_sheet"]) == len(f["cash_flow"]) == 6
+    assert all(abs(row["check"]) < 0.02 for row in f["balance_sheet"])
+    assert f["cash"]["runway_months"] is None and "stays positive" in f["cash"]["note"]
+    assert f["uncertainty"]["months"][0]["cash"]["p50"] > 0
+    assert f["drivers"]["dso_days"]["value"] == pytest.approx(30, abs=2)
+    saved = client.get(f"/tenants/{tenant}/forecasts/{f['id']}", headers=H).json()
+    assert saved["balance_sheet"] == f["balance_sheet"]
+
+
+def test_scenario_job_with_equity_raise(client, tenant):
+    upload(client, tenant, SAMPLE.read_bytes())
+    upload(client, tenant, BALANCES.read_bytes())
+    body = {"simulations": 100, "scenarios": [{"name": "Raise", "adjustments": [
+        {"line": "equity", "kind": "add", "value": 500000, "start": "2026-06-01", "end": "2026-06-01"}]}]}
+    job_id = client.post(f"/tenants/{tenant}/scenario-jobs", json=body, headers=H).json()["id"]
+    sc = client.get(f"/tenants/{tenant}/jobs/{job_id}", headers=H).json()["result"]["scenarios"][0]
+    assert sc["delta_point"]["ending_cash"] == 500000 and sc["delta_point"]["net_income"] == 0
+    assert sc["delta"]["ending_cash"]["p50"] == pytest.approx(500000, abs=1)
+
+
+def test_query_runway_and_funding_with_balance_sheet(client, tenant, fake_llm):
+    upload(client, tenant, SAMPLE.read_bytes())
+    upload(client, tenant, BALANCES.read_bytes())
+    res = ask(client, tenant, "How many months of cash runway do we have?")["result"]
+    assert res["interpretation"]["intent"] == "baseline"
+    assert any("Baseline: cash goes from 721k to" in line for line in res["summary"])
+    res = ask(client, tenant, "What if we raise 500k from investors in June?", simulations=100)["result"]
+    assert res["comparison"]["scenarios"][0]["delta_point"]["ending_cash"] == 500000
+    assert "Raise 500k: ending cash +500k vs baseline." in res["summary"]
+
+
+def test_query_cash_items_without_balance_sheet_warn(client, tenant, fake_llm):
+    upload(client, tenant, SAMPLE.read_bytes())
+    res = ask(client, tenant, "What if we raise 500k from investors in June?", simulations=0)["result"]
+    assert any("no balance sheet" in w for w in res["warnings"])

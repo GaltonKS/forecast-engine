@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT))
 
 from engine import DriverOverrides, ForecastRequest, load_csv, run_forecast, to_monthly  # noqa: E402
 from engine.forecast import run_scenarios  # noqa: E402
+from engine.ingest import to_balances  # noqa: E402
 from engine.schema import Adjustment, ScenarioRequest  # noqa: E402
 
 
@@ -27,6 +28,10 @@ def show(title, resp):
               f"   (chance of a loss month: {u.prob_loss_month:.0%})")
         for line, c in u.calibration.items():
             print(f"  {line} ranges caught {c.coverage:.0%} of backtest months (target 80%), widened x{c.widened_by}")
+    if resp.cash:
+        c = resp.cash
+        print(f"  cash {c.opening_cash:,.0f} -> {c.ending_cash:,.0f} (lowest {c.lowest_cash:,.0f} in "
+              f"{c.lowest_cash_period:%Y-%m}). {c.note}")
     for w in resp.warnings:
         print(f"  WARNING: {w}")
     print(f"\n  {'month':10s} {'revenue':>12s} {'gross profit':>13s} {'opex':>12s} {'net income':>12s}")
@@ -38,8 +43,9 @@ def show(title, resp):
 
 
 def main():
-    monthly = to_monthly(load_csv(ROOT / "sample_data" / "sample_financials.csv"))
-    show("Baseline (12 months)", run_forecast(monthly, ForecastRequest(horizon_months=12)))
+    items = load_csv(ROOT / "sample_data" / "sample_financials.csv") + load_csv(ROOT / "sample_data" / "sample_balances.csv")
+    monthly, balances = to_monthly(items), to_balances(items)
+    show("Baseline (12 months)", run_forecast(monthly, ForecastRequest(horizon_months=12), balances))
 
     # This is the shape the LLM layer will produce from a prompt like
     # "what if growth slows to 2% a month, opex stops growing, and we hire
@@ -50,7 +56,7 @@ def main():
         overrides=DriverOverrides(revenue_growth=0.02, opex_growth=0.0),
         adjustments=[hire],
     )
-    resp = run_forecast(monthly, scenario)
+    resp = run_forecast(monthly, scenario, balances)
     show("Scenario: 2% growth, flat opex, hire 2 in March", resp)
 
     out = ROOT / "sample_data" / "example_response.json"
@@ -62,11 +68,15 @@ def main():
         {"name": "Price +5% from April", "adjustments": [
             Adjustment(line="revenue", kind="pct", value=0.05, start="2026-04-01")]},
         {"name": "Growth halves", "overrides": {"revenue_growth": 0.016}},
-    ]))
+        {"name": "Raise 500k in June", "adjustments": [
+            Adjustment(line="equity", kind="add", value=500_000, start="2026-06-01", end="2026-06-01")]},
+    ]), balances)
     print("\n=== Scenario comparison: change in 12-month net income vs baseline ===")
     for sc in comparison.scenarios:
         d = sc.delta.net_income
-        print(f"  {sc.name:22s} P50 {d.p50:>+12,.0f}   (P10 {d.p10:+,.0f} .. P90 {d.p90:+,.0f})")
+        cash = sc.delta.ending_cash
+        print(f"  {sc.name:22s} P50 {d.p50:>+12,.0f}   (P10 {d.p10:+,.0f} .. P90 {d.p90:+,.0f})"
+              f"   ending cash {cash.p50:+,.0f}")
     out = ROOT / "sample_data" / "example_scenarios.json"
     out.write_text(comparison.model_dump_json(indent=2))
     print(f"\nFull JSON written to {out.relative_to(ROOT)}")

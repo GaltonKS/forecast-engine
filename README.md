@@ -1,10 +1,12 @@
 # Financial Projection Engine
 
 A financial forecasting engine with an HTTP API. You upload a business's
-monthly financials, it fits growth and margin drivers, backtests several
+monthly financials (income statement, plus month-end balances for the balance
+sheet), it fits growth, margin and working-capital drivers, backtests several
 forecasting models on the most recent months, and returns projections with
-every assumption, formula and accuracy score included, plus P10/P50/P90
-ranges from a Monte Carlo simulation. Scenarios (driver overrides and dated
+every assumption, formula and accuracy score included: income statement,
+balance sheet, cash flow and cash runway, with P10/P50/P90 ranges from a Monte
+Carlo simulation. Scenarios (driver overrides and dated
 changes like a hire or a price rise) can be compared side by side. The math is
 deterministic. Plain-language questions go through `/query`: an open model
 turns the prompt into scenario JSON, and the engine does the math.
@@ -20,6 +22,7 @@ engine/            the math (step 1)
   stats.py         seasonality detection + models: driver, seasonal naive, ETS, ARIMA, Prophet (step 3)
   backtest.py      rolling-origin backtest and model selection (step 3)
   simulate.py      Monte Carlo ranges, calibration, dated adjustments (step 4)
+  statements.py    balance sheet, cash flow and runway from the income statement forecast
 llm/               the prompt layer (step 5): prompt -> checked scenario JSON
   schema.py        what the model must return (sent as a JSON schema) + API models
   prompt.py        instructions and the company context sent with each prompt
@@ -194,7 +197,70 @@ curl -s $API/tenants/$T/jobs/$J -H "X-API-Key: $KEY" | jq '.status, .result.scen
 | 2024-01-01 | Subscription revenue | revenue  | 80000.00 |
 | 2024-01-01 | Hosting              | cogs     | 14000.00 |
 
-`category` is one of `revenue`, `cogs`, `opex`, `other`.
+| 2025-12-01 | Bank accounts        | cash        | 720708.19 |
+| 2025-12-01 | Accounts receivable  | receivables | 204078.40 |
+
+Map each account in your chart of accounts to one category, once per customer.
+
+| category | statement | amount |
+|---|---|---|
+| `revenue`, `cogs`, `opex`, `other` | income statement | the month's total (`other` is signed: interest income +, expense -) |
+| `depreciation` | income statement | the month's depreciation; counted in opex and added back as non-cash |
+| `cash`, `receivables`, `inventory`, `fixed_assets` (net), `other_assets` | balance sheet: assets | month-end balance |
+| `payables`, `debt`, `other_liability` | balance sheet: liabilities | month-end balance |
+| `equity` | balance sheet | month-end balance (checked; see below) |
+
+Income statement and balance rows can be in one file or separate uploads, in
+either order (see `sample_data/sample_balances.csv`). The balance sheet,
+cash flow and runway need balances for the **last month of income statement
+data**; earlier months improve the fitted drivers. If assets - liabilities
+doesn't equal the equity you upload, equity is set to assets - liabilities and
+the forecast warns, since it usually means an account is missing.
+
+## Balance sheet and cash flow
+
+Built from the income statement forecast, starting at the last actual
+month's balances:
+
+| line | how it's projected |
+|---|---|
+| receivables | revenue x `dso_days` / 30.4 |
+| inventory | cogs x `dio_days` / 30.4 |
+| payables | (cogs + opex - depreciation) x `dpo_days` / 30.4 |
+| fixed assets | previous + capex - depreciation |
+| debt | previous + borrowed - repaid (from `debt` adjustments) |
+| equity | previous + net income + raised (from `equity` adjustments) |
+| other assets / liabilities | held at the opening balance |
+| cash | previous + operating + investing + financing cash flow |
+
+Cash flow is the indirect method: net income + depreciation - increases in
+receivables and inventory + increases in payables, minus capex, plus
+financing. Cash is the one line no driver sets, so the balance sheet balances
+every month (`check` is always 0).
+
+| driver | default fit |
+|---|---|
+| `dso_days` | receivables / monthly revenue x 30.4, last 3 months with balances |
+| `dio_days` | inventory / monthly cogs x 30.4 |
+| `dpo_days` | payables / monthly cash costs x 30.4 |
+| `depreciation_monthly` | average of the last 3 months of `depreciation` rows |
+| `capex_monthly` | change in fixed assets + depreciation, last 3 consecutive months; equal to depreciation if there's no history |
+
+All five can be overridden in a scenario. `capex`, `debt` and `equity` are
+also adjustment lines (kind `add`), e.g. a one-off equipment purchase, a loan
+drawn in March and repaid monthly, or a funding round in June.
+
+The response adds `opening_balance`, `balance_sheet`, `cash_flow` and `cash`
+(opening, ending and lowest cash, and the first month cash goes negative). With
+simulations, `uncertainty` adds cash P10/P50/P90 per month, `prob_cash_out`
+(share of paths where cash goes negative) and `runway` (months until it does:
+`p10` is the pessimistic end; null means beyond the horizon). Scenario deltas
+include ending cash.
+
+**Not modelled yet:** income tax; interest calculated from the debt balance
+(interest stays in `other` at its historical level, so a new loan's interest
+must be added as an `other` adjustment); depreciation on new capex; payment
+terms that differ by customer or season.
 
 ## Driver fitting
 

@@ -26,13 +26,18 @@ class LLMOverrides(BaseModel):
     opex_base: float | None = Field(description="Monthly opex level")
     opex_growth: float | None = Field(description="MONTHLY opex growth")
     other_net: float | None = Field(description="Monthly other income (+) / expense (-)")
+    dso_days: float | None = Field(description="Days customers take to pay")
+    dio_days: float | None = Field(description="Days of inventory held")
+    dpo_days: float | None = Field(description="Days taken to pay suppliers")
+    capex_monthly: float | None = Field(description="Regular monthly capital spending")
+    depreciation_monthly: float | None = Field(description="Monthly depreciation")
 
 
 class LLMAdjustment(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    line: Literal["revenue", "cogs", "opex", "other"]
+    line: Literal["revenue", "cogs", "opex", "other", "capex", "debt", "equity"]
     kind: Literal["add", "pct"]
-    value: float = Field(description="add: currency per month (negative to subtract); pct: 0.05 = +5%")
+    value: float = Field(description="add: currency per month (negative to subtract); pct: 0.05 = +5%. capex/debt/equity: add only")
     start: Month
     end: Month | None = Field(description="Last month it applies, inclusive; null = to the end")
     label: str = Field(max_length=120)

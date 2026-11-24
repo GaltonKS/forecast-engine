@@ -70,6 +70,13 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
             v = getattr(overrides, key)
             if v is not None and v > 180:
                 warnings.append(f"{name}: {key} of {v:.0f} days is unusually long. Check the number.")
+        if overrides.interest_rate is not None and overrides.interest_rate > 0.3:
+            warnings.append(
+                f"{name}: interest_rate of {overrides.interest_rate:.0%} a year is unusually high. "
+                "Check it wasn't meant as a percentage (8% is 0.08)."
+            )
+        if overrides.tax_rate is not None and overrides.tax_rate > 0.6:
+            warnings.append(f"{name}: tax_rate of {overrides.tax_rate:.0%} is unusually high.")
         if overrides.gross_margin is not None and overrides.gross_margin < 0:
             warnings.append(f"{name}: gross_margin of {overrides.gross_margin:.0%} means selling below cost.")
 
@@ -98,8 +105,10 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
                 )
             if a.line in ("capex", "debt", "equity") and not ctx.opening:
                 warnings.append(f"{name}: '{a.label}' is a cash item, but there's no balance sheet; it has no effect.")
+            life = a.useful_life_months if a.line == "capex" else None
             adjustments.append(
-                Adjustment(line=a.line, kind=a.kind, value=a.value, start=start, end=end, label=a.label)
+                Adjustment(line=a.line, kind=a.kind, value=a.value, start=start, end=end, label=a.label,
+                           useful_life_months=life)
             )
         scenarios.append(Scenario(name=name, overrides=overrides, adjustments=adjustments))
 

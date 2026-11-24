@@ -59,7 +59,8 @@ def check(case: dict, interp: Interpretation | None, warnings: list[str], error:
                  if a.line == wa["line"] and a.kind == wa["kind"]
                  and a.start.strftime("%Y-%m") == wa["start"]
                  and (a.end.strftime("%Y-%m") if a.end else None) == wa["end"]
-                 and abs(a.value - wa["value"]) <= abs(wa["value"]) * wa["rel_tol"] + 1e-9),
+                 and abs(a.value - wa["value"]) <= abs(wa["value"]) * wa["rel_tol"] + 1e-9
+                 and ("useful_life_months" not in wa or a.useful_life_months == wa["useful_life_months"])),
                 None,
             )
             if hit is None:

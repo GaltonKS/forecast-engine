@@ -33,7 +33,7 @@ def build_context(monthly: pd.DataFrame, balances: pd.DataFrame | None = None) -
         last_actual=last.date(),
         forecast_start=(last + pd.DateOffset(months=1)).date(),
         history_months=len(monthly),
-        drivers={k: v.value for k, v in fitted.items()},
+        drivers={**{k: v.value for k, v in fitted.items()}, "tax_rate": st.fit_tax_rate(monthly).value},
         recent={c: float(tail[c].mean()) for c in ("revenue", "cogs", "opex", "other")},
     )
     if opening:
@@ -67,6 +67,7 @@ def render_context(ctx: Context) -> str:
   opex_base      = {_money(d['opex_base'])} per month
   opex_growth    = {d['opex_growth']:.4f} per month ({annual(d['opex_growth']):.1%} per year)
   other_net      = {_money(d['other_net'])} per month
+  tax_rate       = {d['tax_rate']:.4f} on profit
 {_balance(ctx)}"""
 
 
@@ -78,7 +79,8 @@ def _balance(ctx: Context) -> str:
     return f"""- Balance sheet at {_ym(ctx.last_actual)}: cash {_money(o['cash'])}, receivables {_money(o['receivables'])}, inventory {_money(o['inventory'])}, fixed assets {_money(o['fixed_assets'])}, payables {_money(o['payables'])}, debt {_money(o['debt'])}
 - Balance sheet drivers:
   dso_days = {b['dso_days']:.1f}, dio_days = {b['dio_days']:.1f}, dpo_days = {b['dpo_days']:.1f}
-  capex_monthly = {_money(b['capex_monthly'])}, depreciation_monthly = {_money(b['depreciation_monthly'])}"""
+  capex_monthly = {_money(b['capex_monthly'])}, depreciation_monthly = {_money(b['depreciation_monthly'])}, useful_life_months = {b['useful_life_months']:.0f}
+  interest_rate = {b['interest_rate']:.4f} per year on debt"""
 
 
 SYSTEM = """You turn a business owner's question about their financial forecast into scenario JSON for a forecasting engine. The engine does all the math. You never compute or state forecast numbers yourself.
@@ -97,10 +99,11 @@ You can change it two ways:
    - A month name without a year means its next occurrence on or after the first forecast month. "Q3" means July-September. "Next quarter" means the three months starting at the first forecast month.
    - Hiring, salaries, rent, marketing and software are opex. Hosting, materials, payment fees and direct delivery costs are cogs. Losing or winning a customer is revenue.
    - Cash lines (only when the context has a balance sheet; kind must be "add"):
-     "capex": buying equipment or other long-lived assets (a one-off purchase has start = end).
-     "debt": borrowing (+) or repaying (-) a loan, in the month the money moves.
+     "capex": buying equipment or other long-lived assets (a one-off purchase has start = end). Set useful_life_months if the request says how long it lasts ("over 3 years" -> 36); otherwise null. Depreciation is calculated for you.
+     "debt": borrowing (+) or repaying (-) a loan, in the month the money moves. Interest is calculated for you from the debt balance at interest_rate; if the request gives the loan's rate, also set the interest_rate override (it applies to all debt).
      "equity": money raised from investors (+), e.g. a funding round.
-3. Balance sheet drivers (overrides, only with a balance sheet): dso_days (days customers take to pay), dio_days (days of inventory), dpo_days (days to pay suppliers), capex_monthly (regular monthly capital spending), depreciation_monthly.
+3. Balance sheet drivers (overrides, only with a balance sheet): dso_days (days customers take to pay), dio_days (days of inventory), dpo_days (days to pay suppliers), capex_monthly (regular monthly capital spending), depreciation_monthly, useful_life_months (default life of new equipment), interest_rate (ANNUAL, 8% -> 0.08).
+4. tax_rate: income tax on profit, as a fraction (25% -> 0.25). Works with or without a balance sheet. Losses are carried forward automatically.
 
 INTENT
 - "scenarios": the request describes one or more what-ifs. One scenario per alternative being compared ("hire 2 vs 4" -> two scenarios). Give each a short name.
@@ -117,16 +120,16 @@ RULES
 EXAMPLE_NOTE = """EXAMPLES (for a company whose first forecast month is 2026-01)
 
 Request: "What if we hire two engineers in March at 120k a year each, and raise prices 5% from April?"
-{"intent":"scenarios","explanation":"One scenario: two engineering hires from March 2026 and a 5% price rise from April 2026.","assumptions":["Salary cost only, no extra employer costs"],"horizon_months":null,"scenarios":[{"name":"Hire 2 + price rise","overrides":{"revenue_base":null,"revenue_growth":null,"gross_margin":null,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":null,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null},"adjustments":[{"line":"opex","kind":"add","value":20000,"start":"2026-03","end":null,"label":"Two engineers at 120k/year"},{"line":"revenue","kind":"pct","value":0.05,"start":"2026-04","end":null,"label":"5% price rise"}]}],"unsupported_reason":null}
+{"intent":"scenarios","explanation":"One scenario: two engineering hires from March 2026 and a 5% price rise from April 2026.","assumptions":["Salary cost only, no extra employer costs"],"horizon_months":null,"scenarios":[{"name":"Hire 2 + price rise","overrides":{"revenue_base":null,"revenue_growth":null,"gross_margin":null,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":null,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null,"useful_life_months":null,"interest_rate":null,"tax_rate":null},"adjustments":[{"line":"opex","kind":"add","value":20000,"start":"2026-03","end":null,"label":"Two engineers at 120k/year","useful_life_months":null},{"line":"revenue","kind":"pct","value":0.05,"start":"2026-04","end":null,"label":"5% price rise","useful_life_months":null}]}],"unsupported_reason":null}
 
 Request: "Compare growth slowing to 1% a month with growth staying where it is but margin falling to 70%"
-{"intent":"scenarios","explanation":"Two alternatives: monthly revenue growth of 1%, or current growth with a 70% gross margin.","assumptions":[],"horizon_months":null,"scenarios":[{"name":"Growth 1%/month","overrides":{"revenue_base":null,"revenue_growth":0.01,"gross_margin":null,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":null,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null},"adjustments":[]},{"name":"Margin 70%","overrides":{"revenue_base":null,"revenue_growth":null,"gross_margin":0.70,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":null,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null},"adjustments":[]}],"unsupported_reason":null}"""
+{"intent":"scenarios","explanation":"Two alternatives: monthly revenue growth of 1%, or current growth with a 70% gross margin.","assumptions":[],"horizon_months":null,"scenarios":[{"name":"Growth 1%/month","overrides":{"revenue_base":null,"revenue_growth":0.01,"gross_margin":null,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":null,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null,"useful_life_months":null,"interest_rate":null,"tax_rate":null},"adjustments":[]},{"name":"Margin 70%","overrides":{"revenue_base":null,"revenue_growth":null,"gross_margin":0.70,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":null,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null,"useful_life_months":null,"interest_rate":null,"tax_rate":null},"adjustments":[]}],"unsupported_reason":null}"""
 
 
 EXAMPLE_NOTE += """
 
 Request: "What if we raise 500k in June and customers start paying in 45 days?" (company with a balance sheet)
-{"intent":"scenarios","explanation":"An equity raise of 500k in June 2026 and customer payment terms of 45 days.","assumptions":[],"horizon_months":null,"scenarios":[{"name":"Raise + slower collections","overrides":{"revenue_base":null,"revenue_growth":null,"gross_margin":null,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":45,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null},"adjustments":[{"line":"equity","kind":"add","value":500000,"start":"2026-06","end":"2026-06","label":"Funding round"}]}],"unsupported_reason":null}"""
+{"intent":"scenarios","explanation":"An equity raise of 500k in June 2026 and customer payment terms of 45 days.","assumptions":[],"horizon_months":null,"scenarios":[{"name":"Raise + slower collections","overrides":{"revenue_base":null,"revenue_growth":null,"gross_margin":null,"opex_base":null,"opex_growth":null,"other_net":null,"dso_days":45,"dio_days":null,"dpo_days":null,"capex_monthly":null,"depreciation_monthly":null,"useful_life_months":null,"interest_rate":null,"tax_rate":null},"adjustments":[{"line":"equity","kind":"add","value":500000,"start":"2026-06","end":"2026-06","label":"Funding round","useful_life_months":null}]}],"unsupported_reason":null}"""
 
 
 def messages(ctx: Context, prompt: str) -> list[dict]:

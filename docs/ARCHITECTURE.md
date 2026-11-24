@@ -59,8 +59,10 @@ warnings, a code-written summary and the full comparison.
 - **Three statements: in place.** Balance sheet and cash flow are projected
   from the income statement with working-capital days, capex and depreciation
   fitted from uploaded balances; cash runway comes with Monte Carlo ranges.
-  Not modelled yet: income tax, interest from the debt balance, depreciation
-  on new capex, and correlation between the uncertainty in revenue and costs.
+  Income tax (with losses carried forward, paid quarterly), interest from the
+  debt balance, and depreciation on new capex are included. Not modelled yet:
+  interest on cash, pre-forecast tax losses, per-loan rates, and correlation
+  between the uncertainty in revenue and costs.
 - **CSV only.** QuickBooks, Xero and bank feeds should each be a connector that
   outputs the same `LineItem` format, so the engine and API don't change.
 - **Model not deployed or chosen yet.** Everything around the model is built

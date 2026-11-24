@@ -19,7 +19,8 @@ DAYS = st.DAYS
 
 
 def company(months=24, rev0=100_000, g=0.02, gm=0.6, opex0=50_000, og=0.01, dep=2_000, dso=45, dpo=30,
-            capex=3_000, cash0=200_000, debt=100_000, fa0=150_000, inventory_days=0, balance_months=None):
+            capex=3_000, cash0=200_000, debt=100_000, fa0=150_000, inventory_days=0, balance_months=None,
+            interest_rate=0.0, tax_rate=0.0):
     """Income statement + balances with known drivers, consistent month to month."""
     items, cash, fa = [], cash0, fa0
     ar_prev = ap_prev = inv_prev = None
@@ -34,7 +35,13 @@ def company(months=24, rev0=100_000, g=0.02, gm=0.6, opex0=50_000, og=0.01, dep=
             LineItem(period=p, account="Opex", category="opex", amount=opex_cash),
             LineItem(period=p, account="Depreciation", category="depreciation", amount=dep),
         ]
-        ni = rev - cogs - opex_cash - dep
+        interest = debt * interest_rate / 12
+        tax = tax_rate * max(0.0, rev - cogs - opex_cash - dep - interest)
+        if interest:
+            items.append(LineItem(period=p, account="Loan interest", category="interest", amount=interest))
+        if tax:
+            items.append(LineItem(period=p, account="Income tax", category="tax", amount=tax))
+        ni = rev - cogs - opex_cash - dep - interest - tax
         ar, ap = rev * dso / DAYS, (cogs + opex_cash) * dpo / DAYS
         inv = cogs * inventory_days / DAYS
         if m > 0:
@@ -61,7 +68,7 @@ def test_depreciation_counts_as_opex_and_is_tracked():
     assert m["depreciation"].tolist() == [2000, 2000, 2000]
     assert m["opex"].iloc[0] == pytest.approx(50_000 + 2_000)
     assert list(b.columns) == ["cash", "receivables", "inventory", "fixed_assets", "other_assets",
-                               "payables", "debt", "other_liability", "equity"]
+                               "payables", "debt", "other_liability", "tax_payable", "equity"]
 
 
 def test_balances_only_for_months_provided():
@@ -119,10 +126,18 @@ def test_balances_hold_on_every_simulated_path():
     cogs, opex = rev * rng.uniform(0.2, 0.6, (500, 12)), rng.uniform(20_000, 90_000, (500, 12))
     other = rng.normal(0, 1_000, (500, 12))
     drivers = Drivers(revenue_base=1, revenue_growth=0, gross_margin=0.5, opex_base=1, opex_growth=0,
-                      dso_days=40, dio_days=10, dpo_days=25, capex_monthly=5_000, depreciation_monthly=1_500)
+                      dso_days=40, dio_days=10, dpo_days=25, capex_monthly=5_000, depreciation_monthly=1_500,
+                      interest_rate=0.08, tax_rate=0.25)
     adj = [Adjustment(line="equity", kind="add", value=1e5, start="2026-04-01", end="2026-04-01"),
-           Adjustment(line="debt", kind="add", value=-2e3, start="2026-02-01")]
-    s = st.project(opening, drivers, rev, cogs, opex, other, adj, periods)
+           Adjustment(line="debt", kind="add", value=-2e3, start="2026-02-01"),
+           Adjustment(line="capex", kind="add", value=40e3, start="2026-03-01", end="2026-03-01")]
+    capex, new_dep = st.capex_and_new_depreciation(drivers, 3_000, adj, periods)
+    interest = st.interest_path(opening, drivers, adj, periods)
+    opex = opex + new_dep
+    pretax = rev - cogs - opex + other - interest
+    tax = st.tax_schedule(pretax, drivers.tax_rate)
+    pl = dict(revenue=rev, cogs=cogs, opex=opex, depreciation=1_500 + new_dep, tax=tax, net_income=pretax - tax)
+    s = st.project(opening, drivers, pl, capex, adj, periods)
     assert np.abs(s["check"]).max() < 1e-6
 
 
@@ -146,13 +161,18 @@ def test_financing_and_capex_adjustments():
     ]
     base = run_forecast(m, req(simulations=0), b)
     r = run_forecast(m, req(simulations=0, adjustments=adj), b)
-    assert [x.net_income for x in r.months] == [x.net_income for x in base.months]  # cash items only
+    # financing doesn't touch profit; the equipment does, through depreciation from May (80k / 60 months)
+    profit_change = [round(x.net_income - y.net_income, 2) for x, y in zip(r.months, base.months)]
+    assert profit_change[:4] == [0, 0, 0, 0]
+    assert profit_change[4:] == [pytest.approx(-80_000 / 60, abs=0.02)] * (len(profit_change) - 4)
     cf = {x.period.month: x for x in r.cash_flow}
     assert cf[3].equity == 500_000 and cf[2].debt == 200_000 and cf[3].debt == -10_000
     assert cf[4].capex == pytest.approx(base.cash_flow[3].capex - 80_000)
     assert r.balance_sheet[-1].debt == pytest.approx(base.balance_sheet[-1].debt + 200_000 - 10 * 10_000)
-    assert r.balance_sheet[-1].fixed_assets == pytest.approx(base.balance_sheet[-1].fixed_assets + 80_000)
-    expected = 500_000 + 200_000 - 100_000 - 80_000
+    months_depreciated = len(r.months) - 4
+    assert r.balance_sheet[-1].fixed_assets == pytest.approx(
+        base.balance_sheet[-1].fixed_assets + 80_000 - months_depreciated * 80_000 / 60, abs=0.1)
+    expected = 500_000 + 200_000 - 100_000 - 80_000  # depreciation is non-cash: cash effect unchanged
     assert r.cash.ending_cash - base.cash.ending_cash == pytest.approx(expected, abs=0.1)
     assert max(abs(x.check) for x in r.balance_sheet) < 0.02
 
@@ -221,3 +241,98 @@ def test_opening_cash_negative_means_zero_runway():
     assert st.runway(np.array([[-1.0, -2.0]]), -1.0).tolist() == [0.0]
     r = run_forecast(m, req(simulations=0), b)
     assert r.cash.runway_months == 0 or r.opening_balance.cash >= 0
+
+
+# ---------- tax, interest, depreciation on new capex ----------
+
+def test_fitted_interest_and_tax_rates_recover_known_values():
+    m, b = company(interest_rate=0.08, tax_rate=0.25)
+    d = run_forecast(m, req(simulations=0), b).drivers
+    assert d["interest_rate"].value == pytest.approx(0.08, rel=1e-6)
+    assert d["tax_rate"].value == pytest.approx(0.25, rel=1e-6)
+
+
+def test_income_statement_lines_add_up():
+    m, b = company(interest_rate=0.08, tax_rate=0.25)
+    r = run_forecast(m, req(simulations=0), b)
+    for x in r.months:
+        assert x.interest == pytest.approx(100_000 * 0.08 / 12, abs=0.01)  # flat debt
+        assert x.pretax_income == pytest.approx(x.operating_income + x.other_net - x.interest, abs=0.02)
+        assert x.tax == pytest.approx(0.25 * x.pretax_income, abs=0.02)
+        assert x.net_income == pytest.approx(x.pretax_income - x.tax, abs=0.02)
+
+
+def test_new_loan_costs_interest_from_the_next_month():
+    m, b = company(interest_rate=0.08)
+    loan = Adjustment(line="debt", kind="add", value=200_000, start="2026-03-01", end="2026-03-01")
+    base = run_forecast(m, req(simulations=0), b)
+    r = run_forecast(m, req(simulations=0, adjustments=[loan]), b)
+    extra = [round(x.interest - y.interest, 2) for x, y in zip(r.months, base.months)]
+    assert extra[:3] == [0, 0, 0] and extra[3] == pytest.approx(200_000 * 0.08 / 12, abs=0.01)
+    # a scenario rate applies to the whole balance
+    r = run_forecast(m, req(simulations=0, overrides=DriverOverrides(interest_rate=0.12)), b)
+    assert r.months[0].interest == pytest.approx(100_000 * 0.12 / 12, abs=0.01)
+
+
+def test_losses_carry_forward_before_tax_is_charged():
+    tax = st.tax_schedule(np.array([-100.0, 50.0, 80.0, 10.0]), 0.25)
+    assert tax.tolist() == [0, 0, pytest.approx(7.5), pytest.approx(2.5)]
+    paths = st.tax_schedule(np.array([[-100.0, 50.0, 80.0], [10.0, 10.0, 10.0]]), 0.5)
+    assert paths.shape == (2, 3) and paths[1].tolist() == [5, 5, 5]
+    assert st.tax_schedule(np.array([[1.0, 2.0]]), 0.5).shape == (1, 2)
+
+
+def test_tax_is_paid_quarterly():
+    m, b = company(tax_rate=0.25)
+    r = run_forecast(m, req(simulations=0, horizon_months=6), b)
+    owed = [x.tax_payable for x in r.balance_sheet]  # Jan..Jun 2026
+    taxes = [x.tax for x in r.months]
+    assert owed[0] == pytest.approx(taxes[0], abs=0.02)  # January: paid nothing owed at opening, accrues Jan
+    assert owed[2] == pytest.approx(sum(taxes[:3]), abs=0.05)  # accrues through March
+    assert owed[3] == pytest.approx(taxes[3], abs=0.02)  # April: Q1 paid
+    cf = r.cash_flow
+    assert cf[1].change_tax_payable == pytest.approx(taxes[1], abs=0.02)  # Feb: owed, not paid
+    assert cf[3].change_tax_payable == pytest.approx(taxes[3] - owed[2], abs=0.05)  # Apr: Q1 paid out
+    assert max(abs(x.check) for x in r.balance_sheet) < 0.02
+
+
+def test_tax_works_without_a_balance_sheet():
+    m, _ = company()
+    base = run_forecast(m, req(simulations=0))
+    r = run_forecast(m, req(simulations=0, overrides=DriverOverrides(tax_rate=0.2)))
+    assert r.months[0].net_income == pytest.approx(base.months[0].net_income * 0.8, abs=0.05)
+    assert r.drivers["tax_rate"].overridden
+
+
+def test_interest_without_balance_sheet_stays_at_recent_average():
+    m, _ = company(interest_rate=0.06)
+    r = run_forecast(m, req(simulations=0, overrides=DriverOverrides(interest_rate=0.2)))
+    assert all(x.interest == pytest.approx(100_000 * 0.06 / 12, abs=0.01) for x in r.months)
+    assert any("interest_rate" in w and "need a balance sheet" in w for w in r.warnings)
+
+
+def test_each_purchase_uses_its_own_useful_life():
+    m, b = company()
+    buy = Adjustment(line="capex", kind="add", value=36_000, start="2026-02-01", end="2026-02-01",
+                     useful_life_months=36, label="Van")
+    base = run_forecast(m, req(simulations=0), b)
+    r = run_forecast(m, req(simulations=0, adjustments=[buy]), b)
+    extra = [round(x.depreciation - y.depreciation, 2) for x, y in zip(r.months, base.months)]
+    assert extra[:2] == [0, 0] and extra[2:] == [1000.0] * 10
+    assert [round(y.opex - x.opex, 2) for x, y in zip(base.months, r.months)] == extra  # in opex too
+
+
+def test_higher_regular_capex_depreciates_the_extra_only():
+    m, b = company(capex=3_000)
+    r = run_forecast(m, req(simulations=0, overrides=DriverOverrides(capex_monthly=5_000, useful_life_months=40)), b)
+    base = run_forecast(m, req(simulations=0), b)
+    extra = [x.depreciation - y.depreciation for x, y in zip(r.months, base.months)]
+    # 2k/month extra, each month's purchase adds 2000/40 = 50/month from the month after
+    assert extra[:4] == pytest.approx([0, 50, 100, 150])
+
+
+def test_simulated_paths_include_tax_and_interest():
+    m, b = company(interest_rate=0.08, tax_rate=0.25)
+    r = run_forecast(m, req(simulations=500), b)
+    for point, band_ in zip(r.months, r.uncertainty.months):
+        assert band_.net_income.p50 == pytest.approx(point.net_income, rel=0.03)

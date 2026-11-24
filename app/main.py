@@ -76,6 +76,7 @@ class BalanceRow(BaseModel):
     payables: float
     debt: float
     other_liability: float
+    tax_payable: float = 0.0
     total_liabilities: float
     equity: float
 
@@ -86,6 +87,8 @@ class MonthlyRow(BaseModel):
     cogs: float
     opex: float
     other: float
+    interest: float = 0.0
+    tax: float = 0.0
     gross_profit: float
     net_income: float
 
@@ -352,8 +355,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cogs=r.cogs,
                 opex=r.opex,
                 other=r.other,
+                interest=r.interest,
+                tax=r.tax,
                 gross_profit=round(r.revenue - r.cogs, 2),
-                net_income=round(r.revenue - r.cogs - r.opex + r.other, 2),
+                net_income=round(r.revenue - r.cogs - r.opex + r.other - r.interest - r.tax, 2),
             )
             for idx, r in m.iterrows()
         ]

@@ -1,7 +1,7 @@
 {
-  "engine_version": "0.4.0",
+  "engine_version": "0.5.0",
   "baseline": {
-    "engine_version": "0.4.0",
+    "engine_version": "0.5.0",
     "last_actual_period": "2025-12-01",
     "history_months": 24,
     "drivers": {
@@ -35,6 +35,11 @@
         "method": "Average net other income of the last 6 months",
         "overridden": false
       },
+      "tax_rate": {
+        "value": 0.0,
+        "method": "No tax rows; set tax_rate to model income tax",
+        "overridden": false
+      },
       "dso_days": {
         "value": 30.40191112838716,
         "method": "receivables / monthly revenue x 30.4 days, last 3 months with balances",
@@ -59,6 +64,16 @@
         "value": 0.0,
         "method": "No depreciation in the income statement; tag depreciation accounts 'depreciation' to model it",
         "overridden": false
+      },
+      "useful_life_months": {
+        "value": 60.0,
+        "method": "Default 60 months (5 years) for capex above the baseline; override per scenario or per purchase",
+        "overridden": false
+      },
+      "interest_rate": {
+        "value": 0.0,
+        "method": "No interest rows; set interest_rate to charge interest on debt",
+        "overridden": false
       }
     },
     "formulas": {
@@ -67,11 +82,15 @@
       "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
       "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
       "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-      "net_income": "net_income[t] = operating_income[t] + other_net",
+      "interest": "interest[t] = debt[t-1] * interest_rate / 12 (recent average if there's no balance sheet)",
+      "tax": "tax[t] = tax_rate * max(0, pretax_income[t] - losses carried forward)",
+      "net_income": "net_income[t] = operating_income[t] + other_net - interest[t] - tax[t]",
       "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
       "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
       "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
-      "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+      "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]",
+      "depreciation": "depreciation[t] = depreciation_monthly + extra capex / useful_life_months, from the month after purchase",
+      "tax_payable": "tax accrues monthly and is paid the month after each quarter end",
       "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
       "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
       "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
@@ -86,7 +105,11 @@
         "opex": 103621.88,
         "operating_income": 63081.79,
         "other_net": 403.85,
-        "net_income": 63485.65
+        "interest": 0.0,
+        "pretax_income": 63485.65,
+        "tax": 0.0,
+        "net_income": 63485.65,
+        "depreciation": 0.0
       },
       {
         "period": "2026-02-01",
@@ -96,7 +119,11 @@
         "opex": 105136.16,
         "operating_income": 67032.27,
         "other_net": 403.85,
-        "net_income": 67436.12
+        "interest": 0.0,
+        "pretax_income": 67436.12,
+        "tax": 0.0,
+        "net_income": 67436.12,
+        "depreciation": 0.0
       },
       {
         "period": "2026-03-01",
@@ -106,7 +133,11 @@
         "opex": 106672.57,
         "operating_income": 71139.75,
         "other_net": 403.85,
-        "net_income": 71543.61
+        "interest": 0.0,
+        "pretax_income": 71543.61,
+        "tax": 0.0,
+        "net_income": 71543.61,
+        "depreciation": 0.0
       },
       {
         "period": "2026-04-01",
@@ -116,7 +147,11 @@
         "opex": 108231.43,
         "operating_income": 75409.8,
         "other_net": 403.85,
-        "net_income": 75813.65
+        "interest": 0.0,
+        "pretax_income": 75813.65,
+        "tax": 0.0,
+        "net_income": 75813.65,
+        "depreciation": 0.0
       },
       {
         "period": "2026-05-01",
@@ -126,7 +161,11 @@
         "opex": 109813.07,
         "operating_income": 79848.15,
         "other_net": 403.85,
-        "net_income": 80252.0
+        "interest": 0.0,
+        "pretax_income": 80252.0,
+        "tax": 0.0,
+        "net_income": 80252.0,
+        "depreciation": 0.0
       },
       {
         "period": "2026-06-01",
@@ -136,7 +175,11 @@
         "opex": 111417.83,
         "operating_income": 84460.72,
         "other_net": 403.85,
-        "net_income": 84864.58
+        "interest": 0.0,
+        "pretax_income": 84864.58,
+        "tax": 0.0,
+        "net_income": 84864.58,
+        "depreciation": 0.0
       },
       {
         "period": "2026-07-01",
@@ -146,7 +189,11 @@
         "opex": 113046.04,
         "operating_income": 89253.66,
         "other_net": 403.85,
-        "net_income": 89657.51
+        "interest": 0.0,
+        "pretax_income": 89657.51,
+        "tax": 0.0,
+        "net_income": 89657.51,
+        "depreciation": 0.0
       },
       {
         "period": "2026-08-01",
@@ -156,7 +203,11 @@
         "opex": 114698.04,
         "operating_income": 94233.3,
         "other_net": 403.85,
-        "net_income": 94637.15
+        "interest": 0.0,
+        "pretax_income": 94637.15,
+        "tax": 0.0,
+        "net_income": 94637.15,
+        "depreciation": 0.0
       },
       {
         "period": "2026-09-01",
@@ -166,7 +217,11 @@
         "opex": 116374.18,
         "operating_income": 99406.18,
         "other_net": 403.85,
-        "net_income": 99810.04
+        "interest": 0.0,
+        "pretax_income": 99810.04,
+        "tax": 0.0,
+        "net_income": 99810.04,
+        "depreciation": 0.0
       },
       {
         "period": "2026-10-01",
@@ -176,7 +231,11 @@
         "opex": 118074.82,
         "operating_income": 104779.1,
         "other_net": 403.85,
-        "net_income": 105182.95
+        "interest": 0.0,
+        "pretax_income": 105182.95,
+        "tax": 0.0,
+        "net_income": 105182.95,
+        "depreciation": 0.0
       },
       {
         "period": "2026-11-01",
@@ -186,7 +245,11 @@
         "opex": 119800.31,
         "operating_income": 110359.04,
         "other_net": 403.85,
-        "net_income": 110762.89
+        "interest": 0.0,
+        "pretax_income": 110762.89,
+        "tax": 0.0,
+        "net_income": 110762.89,
+        "depreciation": 0.0
       },
       {
         "period": "2026-12-01",
@@ -196,7 +259,11 @@
         "opex": 121551.02,
         "operating_income": 116153.25,
         "other_net": 403.85,
-        "net_income": 116557.1
+        "interest": 0.0,
+        "pretax_income": 116557.1,
+        "tax": 0.0,
+        "net_income": 116557.1,
+        "depreciation": 0.0
       }
     ],
     "models": {
@@ -806,6 +873,7 @@
       "payables": 88526.24,
       "debt": 150000.0,
       "other_liability": 30000.0,
+      "tax_payable": 0.0,
       "total_liabilities": 268526.24,
       "equity": 842260.35,
       "check": 0.0
@@ -822,6 +890,7 @@
         "payables": 89021.42,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 269021.42,
         "equity": 905746.0,
         "check": 0.0
@@ -837,6 +906,7 @@
         "payables": 90728.32,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 270728.32,
         "equity": 973182.11,
         "check": 0.0
@@ -852,6 +922,7 @@
         "payables": 92473.47,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 272473.47,
         "equity": 1044725.72,
         "check": 0.0
@@ -867,6 +938,7 @@
         "payables": 94257.88,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 274257.88,
         "equity": 1120539.37,
         "check": 0.0
@@ -882,6 +954,7 @@
         "payables": 96082.55,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 276082.55,
         "equity": 1200791.37,
         "check": 0.0
@@ -897,6 +970,7 @@
         "payables": 97948.55,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 277948.55,
         "equity": 1285655.95,
         "check": 0.0
@@ -912,6 +986,7 @@
         "payables": 99856.97,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 279856.97,
         "equity": 1375313.46,
         "check": 0.0
@@ -927,6 +1002,7 @@
         "payables": 101808.9,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 281808.9,
         "equity": 1469950.61,
         "check": 0.0
@@ -942,6 +1018,7 @@
         "payables": 103805.52,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 283805.52,
         "equity": 1569760.65,
         "check": 0.0
@@ -957,6 +1034,7 @@
         "payables": 105847.99,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 285847.99,
         "equity": 1674943.6,
         "check": 0.0
@@ -972,6 +1050,7 @@
         "payables": 107937.53,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 287937.53,
         "equity": 1785706.49,
         "check": 0.0
@@ -987,6 +1066,7 @@
         "payables": 110075.41,
         "debt": 150000.0,
         "other_liability": 30000.0,
+        "tax_payable": 0.0,
         "total_liabilities": 290075.41,
         "equity": 1902263.59,
         "check": 0.0
@@ -1000,6 +1080,7 @@
         "change_receivables": 2742.89,
         "change_inventory": 0.0,
         "change_payables": 495.18,
+        "change_tax_payable": 0.0,
         "operating": 66723.71,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1016,6 +1097,7 @@
         "change_receivables": -6600.03,
         "change_inventory": 0.0,
         "change_payables": 1706.9,
+        "change_tax_payable": 0.0,
         "operating": 62542.99,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1032,6 +1114,7 @@
         "change_receivables": -6816.39,
         "change_inventory": 0.0,
         "change_payables": 1745.16,
+        "change_tax_payable": 0.0,
         "operating": 66472.37,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1048,6 +1131,7 @@
         "change_receivables": -7039.84,
         "change_inventory": 0.0,
         "change_payables": 1784.4,
+        "change_tax_payable": 0.0,
         "operating": 70558.22,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1064,6 +1148,7 @@
         "change_receivables": -7270.61,
         "change_inventory": 0.0,
         "change_payables": 1824.68,
+        "change_tax_payable": 0.0,
         "operating": 74806.06,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1080,6 +1165,7 @@
         "change_receivables": -7508.95,
         "change_inventory": 0.0,
         "change_payables": 1866.0,
+        "change_tax_payable": 0.0,
         "operating": 79221.63,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1096,6 +1182,7 @@
         "change_receivables": -7755.11,
         "change_inventory": 0.0,
         "change_payables": 1908.41,
+        "change_tax_payable": 0.0,
         "operating": 83810.82,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1112,6 +1199,7 @@
         "change_receivables": -8009.33,
         "change_inventory": 0.0,
         "change_payables": 1951.94,
+        "change_tax_payable": 0.0,
         "operating": 88579.76,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1128,6 +1216,7 @@
         "change_receivables": -8271.88,
         "change_inventory": 0.0,
         "change_payables": 1996.61,
+        "change_tax_payable": 0.0,
         "operating": 93534.77,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1144,6 +1233,7 @@
         "change_receivables": -8543.05,
         "change_inventory": 0.0,
         "change_payables": 2042.47,
+        "change_tax_payable": 0.0,
         "operating": 98682.38,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1160,6 +1250,7 @@
         "change_receivables": -8823.1,
         "change_inventory": 0.0,
         "change_payables": 2089.55,
+        "change_tax_payable": 0.0,
         "operating": 104029.34,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1176,6 +1267,7 @@
         "change_receivables": -9112.33,
         "change_inventory": 0.0,
         "change_payables": 2137.87,
+        "change_tax_payable": 0.0,
         "operating": 109582.64,
         "capex": -2000.0,
         "investing": -2000.0,
@@ -1201,7 +1293,7 @@
     {
       "name": "Hire 2 in March",
       "forecast": {
-        "engine_version": "0.4.0",
+        "engine_version": "0.5.0",
         "last_actual_period": "2025-12-01",
         "history_months": 24,
         "drivers": {
@@ -1235,6 +1327,11 @@
             "method": "Average net other income of the last 6 months",
             "overridden": false
           },
+          "tax_rate": {
+            "value": 0.0,
+            "method": "No tax rows; set tax_rate to model income tax",
+            "overridden": false
+          },
           "dso_days": {
             "value": 30.40191112838716,
             "method": "receivables / monthly revenue x 30.4 days, last 3 months with balances",
@@ -1259,6 +1356,16 @@
             "value": 0.0,
             "method": "No depreciation in the income statement; tag depreciation accounts 'depreciation' to model it",
             "overridden": false
+          },
+          "useful_life_months": {
+            "value": 60.0,
+            "method": "Default 60 months (5 years) for capex above the baseline; override per scenario or per purchase",
+            "overridden": false
+          },
+          "interest_rate": {
+            "value": 0.0,
+            "method": "No interest rows; set interest_rate to charge interest on debt",
+            "overridden": false
           }
         },
         "formulas": {
@@ -1267,12 +1374,16 @@
           "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
           "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
           "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-          "net_income": "net_income[t] = operating_income[t] + other_net + adjustments",
+          "interest": "interest[t] = debt[t-1] * interest_rate / 12 (recent average if there's no balance sheet)",
+          "tax": "tax[t] = tax_rate * max(0, pretax_income[t] - losses carried forward)",
+          "net_income": "net_income[t] = operating_income[t] + other_net - interest[t] - tax[t] + adjustments",
           "adjustments": "Each adjustment adds (currency/month) or scales (pct) its line from start through end",
           "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
           "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
           "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
-          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]",
+          "depreciation": "depreciation[t] = depreciation_monthly + extra capex / useful_life_months, from the month after purchase",
+          "tax_payable": "tax accrues monthly and is paid the month after each quarter end",
           "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
           "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
           "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
@@ -1287,7 +1398,11 @@
             "opex": 103621.88,
             "operating_income": 63081.79,
             "other_net": 403.85,
-            "net_income": 63485.65
+            "interest": 0.0,
+            "pretax_income": 63485.65,
+            "tax": 0.0,
+            "net_income": 63485.65,
+            "depreciation": 0.0
           },
           {
             "period": "2026-02-01",
@@ -1297,7 +1412,11 @@
             "opex": 105136.16,
             "operating_income": 67032.27,
             "other_net": 403.85,
-            "net_income": 67436.12
+            "interest": 0.0,
+            "pretax_income": 67436.12,
+            "tax": 0.0,
+            "net_income": 67436.12,
+            "depreciation": 0.0
           },
           {
             "period": "2026-03-01",
@@ -1307,7 +1426,11 @@
             "opex": 136672.57,
             "operating_income": 41139.75,
             "other_net": 403.85,
-            "net_income": 41543.61
+            "interest": 0.0,
+            "pretax_income": 41543.61,
+            "tax": 0.0,
+            "net_income": 41543.61,
+            "depreciation": 0.0
           },
           {
             "period": "2026-04-01",
@@ -1317,7 +1440,11 @@
             "opex": 138231.43,
             "operating_income": 45409.8,
             "other_net": 403.85,
-            "net_income": 45813.65
+            "interest": 0.0,
+            "pretax_income": 45813.65,
+            "tax": 0.0,
+            "net_income": 45813.65,
+            "depreciation": 0.0
           },
           {
             "period": "2026-05-01",
@@ -1327,7 +1454,11 @@
             "opex": 139813.07,
             "operating_income": 49848.15,
             "other_net": 403.85,
-            "net_income": 50252.0
+            "interest": 0.0,
+            "pretax_income": 50252.0,
+            "tax": 0.0,
+            "net_income": 50252.0,
+            "depreciation": 0.0
           },
           {
             "period": "2026-06-01",
@@ -1337,7 +1468,11 @@
             "opex": 141417.83,
             "operating_income": 54460.72,
             "other_net": 403.85,
-            "net_income": 54864.58
+            "interest": 0.0,
+            "pretax_income": 54864.58,
+            "tax": 0.0,
+            "net_income": 54864.58,
+            "depreciation": 0.0
           },
           {
             "period": "2026-07-01",
@@ -1347,7 +1482,11 @@
             "opex": 143046.04,
             "operating_income": 59253.66,
             "other_net": 403.85,
-            "net_income": 59657.51
+            "interest": 0.0,
+            "pretax_income": 59657.51,
+            "tax": 0.0,
+            "net_income": 59657.51,
+            "depreciation": 0.0
           },
           {
             "period": "2026-08-01",
@@ -1357,7 +1496,11 @@
             "opex": 144698.04,
             "operating_income": 64233.3,
             "other_net": 403.85,
-            "net_income": 64637.15
+            "interest": 0.0,
+            "pretax_income": 64637.15,
+            "tax": 0.0,
+            "net_income": 64637.15,
+            "depreciation": 0.0
           },
           {
             "period": "2026-09-01",
@@ -1367,7 +1510,11 @@
             "opex": 146374.18,
             "operating_income": 69406.18,
             "other_net": 403.85,
-            "net_income": 69810.04
+            "interest": 0.0,
+            "pretax_income": 69810.04,
+            "tax": 0.0,
+            "net_income": 69810.04,
+            "depreciation": 0.0
           },
           {
             "period": "2026-10-01",
@@ -1377,7 +1524,11 @@
             "opex": 148074.82,
             "operating_income": 74779.1,
             "other_net": 403.85,
-            "net_income": 75182.95
+            "interest": 0.0,
+            "pretax_income": 75182.95,
+            "tax": 0.0,
+            "net_income": 75182.95,
+            "depreciation": 0.0
           },
           {
             "period": "2026-11-01",
@@ -1387,7 +1538,11 @@
             "opex": 149800.31,
             "operating_income": 80359.04,
             "other_net": 403.85,
-            "net_income": 80762.89
+            "interest": 0.0,
+            "pretax_income": 80762.89,
+            "tax": 0.0,
+            "net_income": 80762.89,
+            "depreciation": 0.0
           },
           {
             "period": "2026-12-01",
@@ -1397,7 +1552,11 @@
             "opex": 151551.02,
             "operating_income": 86153.25,
             "other_net": 403.85,
-            "net_income": 86557.1
+            "interest": 0.0,
+            "pretax_income": 86557.1,
+            "tax": 0.0,
+            "net_income": 86557.1,
+            "depreciation": 0.0
           }
         ],
         "models": {
@@ -1595,7 +1754,8 @@
             "value": 30000.0,
             "start": "2026-03-01",
             "end": null,
-            "label": "Hire 2 engineers"
+            "label": "Hire 2 engineers",
+            "useful_life_months": null
           }
         ],
         "uncertainty": {
@@ -2016,6 +2176,7 @@
           "payables": 88526.24,
           "debt": 150000.0,
           "other_liability": 30000.0,
+          "tax_payable": 0.0,
           "total_liabilities": 268526.24,
           "equity": 842260.35,
           "check": 0.0
@@ -2032,6 +2193,7 @@
             "payables": 89021.42,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 269021.42,
             "equity": 905746.0,
             "check": 0.0
@@ -2047,6 +2209,7 @@
             "payables": 90728.32,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 270728.32,
             "equity": 973182.11,
             "check": 0.0
@@ -2062,6 +2225,7 @@
             "payables": 111776.8,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 291776.8,
             "equity": 1014725.72,
             "check": 0.0
@@ -2077,6 +2241,7 @@
             "payables": 113561.2,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 293561.2,
             "equity": 1060539.37,
             "check": 0.0
@@ -2092,6 +2257,7 @@
             "payables": 115385.88,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 295385.88,
             "equity": 1110791.37,
             "check": 0.0
@@ -2107,6 +2273,7 @@
             "payables": 117251.88,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 297251.88,
             "equity": 1165655.95,
             "check": 0.0
@@ -2122,6 +2289,7 @@
             "payables": 119160.29,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 299160.29,
             "equity": 1225313.46,
             "check": 0.0
@@ -2137,6 +2305,7 @@
             "payables": 121112.23,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 301112.23,
             "equity": 1289950.61,
             "check": 0.0
@@ -2152,6 +2321,7 @@
             "payables": 123108.84,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 303108.84,
             "equity": 1359760.65,
             "check": 0.0
@@ -2167,6 +2337,7 @@
             "payables": 125151.31,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 305151.31,
             "equity": 1434943.6,
             "check": 0.0
@@ -2182,6 +2353,7 @@
             "payables": 127240.86,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 307240.86,
             "equity": 1515706.49,
             "check": 0.0
@@ -2197,6 +2369,7 @@
             "payables": 129378.73,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 309378.73,
             "equity": 1602263.59,
             "check": 0.0
@@ -2210,6 +2383,7 @@
             "change_receivables": 2742.89,
             "change_inventory": 0.0,
             "change_payables": 495.18,
+            "change_tax_payable": 0.0,
             "operating": 66723.71,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2226,6 +2400,7 @@
             "change_receivables": -6600.03,
             "change_inventory": 0.0,
             "change_payables": 1706.9,
+            "change_tax_payable": 0.0,
             "operating": 62542.99,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2242,6 +2417,7 @@
             "change_receivables": -6816.39,
             "change_inventory": 0.0,
             "change_payables": 21048.48,
+            "change_tax_payable": 0.0,
             "operating": 55775.7,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2258,6 +2434,7 @@
             "change_receivables": -7039.84,
             "change_inventory": 0.0,
             "change_payables": 1784.4,
+            "change_tax_payable": 0.0,
             "operating": 40558.22,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2274,6 +2451,7 @@
             "change_receivables": -7270.61,
             "change_inventory": 0.0,
             "change_payables": 1824.68,
+            "change_tax_payable": 0.0,
             "operating": 44806.06,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2290,6 +2468,7 @@
             "change_receivables": -7508.95,
             "change_inventory": 0.0,
             "change_payables": 1866.0,
+            "change_tax_payable": 0.0,
             "operating": 49221.63,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2306,6 +2485,7 @@
             "change_receivables": -7755.11,
             "change_inventory": 0.0,
             "change_payables": 1908.41,
+            "change_tax_payable": 0.0,
             "operating": 53810.82,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2322,6 +2502,7 @@
             "change_receivables": -8009.33,
             "change_inventory": 0.0,
             "change_payables": 1951.94,
+            "change_tax_payable": 0.0,
             "operating": 58579.76,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2338,6 +2519,7 @@
             "change_receivables": -8271.88,
             "change_inventory": 0.0,
             "change_payables": 1996.61,
+            "change_tax_payable": 0.0,
             "operating": 63534.77,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2354,6 +2536,7 @@
             "change_receivables": -8543.05,
             "change_inventory": 0.0,
             "change_payables": 2042.47,
+            "change_tax_payable": 0.0,
             "operating": 68682.38,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2370,6 +2553,7 @@
             "change_receivables": -8823.1,
             "change_inventory": 0.0,
             "change_payables": 2089.55,
+            "change_tax_payable": 0.0,
             "operating": 74029.34,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2386,6 +2570,7 @@
             "change_receivables": -9112.33,
             "change_inventory": 0.0,
             "change_payables": 2137.87,
+            "change_tax_payable": 0.0,
             "operating": 79582.64,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -2435,7 +2620,7 @@
     {
       "name": "Price +5% from April",
       "forecast": {
-        "engine_version": "0.4.0",
+        "engine_version": "0.5.0",
         "last_actual_period": "2025-12-01",
         "history_months": 24,
         "drivers": {
@@ -2469,6 +2654,11 @@
             "method": "Average net other income of the last 6 months",
             "overridden": false
           },
+          "tax_rate": {
+            "value": 0.0,
+            "method": "No tax rows; set tax_rate to model income tax",
+            "overridden": false
+          },
           "dso_days": {
             "value": 30.40191112838716,
             "method": "receivables / monthly revenue x 30.4 days, last 3 months with balances",
@@ -2493,6 +2683,16 @@
             "value": 0.0,
             "method": "No depreciation in the income statement; tag depreciation accounts 'depreciation' to model it",
             "overridden": false
+          },
+          "useful_life_months": {
+            "value": 60.0,
+            "method": "Default 60 months (5 years) for capex above the baseline; override per scenario or per purchase",
+            "overridden": false
+          },
+          "interest_rate": {
+            "value": 0.0,
+            "method": "No interest rows; set interest_rate to charge interest on debt",
+            "overridden": false
           }
         },
         "formulas": {
@@ -2501,12 +2701,16 @@
           "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
           "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
           "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-          "net_income": "net_income[t] = operating_income[t] + other_net + adjustments",
+          "interest": "interest[t] = debt[t-1] * interest_rate / 12 (recent average if there's no balance sheet)",
+          "tax": "tax[t] = tax_rate * max(0, pretax_income[t] - losses carried forward)",
+          "net_income": "net_income[t] = operating_income[t] + other_net - interest[t] - tax[t] + adjustments",
           "adjustments": "Each adjustment adds (currency/month) or scales (pct) its line from start through end",
           "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
           "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
           "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
-          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]",
+          "depreciation": "depreciation[t] = depreciation_monthly + extra capex / useful_life_months, from the month after purchase",
+          "tax_payable": "tax accrues monthly and is paid the month after each quarter end",
           "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
           "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
           "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
@@ -2521,7 +2725,11 @@
             "opex": 103621.88,
             "operating_income": 63081.79,
             "other_net": 403.85,
-            "net_income": 63485.65
+            "interest": 0.0,
+            "pretax_income": 63485.65,
+            "tax": 0.0,
+            "net_income": 63485.65,
+            "depreciation": 0.0
           },
           {
             "period": "2026-02-01",
@@ -2531,7 +2739,11 @@
             "opex": 105136.16,
             "operating_income": 67032.27,
             "other_net": 403.85,
-            "net_income": 67436.12
+            "interest": 0.0,
+            "pretax_income": 67436.12,
+            "tax": 0.0,
+            "net_income": 67436.12,
+            "depreciation": 0.0
           },
           {
             "period": "2026-03-01",
@@ -2541,7 +2753,11 @@
             "opex": 106672.57,
             "operating_income": 71139.75,
             "other_net": 403.85,
-            "net_income": 71543.61
+            "interest": 0.0,
+            "pretax_income": 71543.61,
+            "tax": 0.0,
+            "net_income": 71543.61,
+            "depreciation": 0.0
           },
           {
             "period": "2026-04-01",
@@ -2551,7 +2767,11 @@
             "opex": 108231.43,
             "operating_income": 84591.86,
             "other_net": 403.85,
-            "net_income": 84995.72
+            "interest": 0.0,
+            "pretax_income": 84995.72,
+            "tax": 0.0,
+            "net_income": 84995.72,
+            "depreciation": 0.0
           },
           {
             "period": "2026-05-01",
@@ -2561,7 +2781,11 @@
             "opex": 109813.07,
             "operating_income": 89331.21,
             "other_net": 403.85,
-            "net_income": 89735.06
+            "interest": 0.0,
+            "pretax_income": 89735.06,
+            "tax": 0.0,
+            "net_income": 89735.06,
+            "depreciation": 0.0
           },
           {
             "period": "2026-06-01",
@@ -2571,7 +2795,11 @@
             "opex": 111417.83,
             "operating_income": 94254.65,
             "other_net": 403.85,
-            "net_income": 94658.5
+            "interest": 0.0,
+            "pretax_income": 94658.5,
+            "tax": 0.0,
+            "net_income": 94658.5,
+            "depreciation": 0.0
           },
           {
             "period": "2026-07-01",
@@ -2581,7 +2809,11 @@
             "opex": 113046.04,
             "operating_income": 99368.64,
             "other_net": 403.85,
-            "net_income": 99772.5
+            "interest": 0.0,
+            "pretax_income": 99772.5,
+            "tax": 0.0,
+            "net_income": 99772.5,
+            "depreciation": 0.0
           },
           {
             "period": "2026-08-01",
@@ -2591,7 +2823,11 @@
             "opex": 114698.04,
             "operating_income": 104679.86,
             "other_net": 403.85,
-            "net_income": 105083.72
+            "interest": 0.0,
+            "pretax_income": 105083.72,
+            "tax": 0.0,
+            "net_income": 105083.72,
+            "depreciation": 0.0
           },
           {
             "period": "2026-09-01",
@@ -2601,7 +2837,11 @@
             "opex": 116374.18,
             "operating_income": 110195.2,
             "other_net": 403.85,
-            "net_income": 110599.06
+            "interest": 0.0,
+            "pretax_income": 110599.06,
+            "tax": 0.0,
+            "net_income": 110599.06,
+            "depreciation": 0.0
           },
           {
             "period": "2026-10-01",
@@ -2611,7 +2851,11 @@
             "opex": 118074.82,
             "operating_income": 115921.79,
             "other_net": 403.85,
-            "net_income": 116325.65
+            "interest": 0.0,
+            "pretax_income": 116325.65,
+            "tax": 0.0,
+            "net_income": 116325.65,
+            "depreciation": 0.0
           },
           {
             "period": "2026-11-01",
@@ -2621,7 +2865,11 @@
             "opex": 119800.31,
             "operating_income": 121867.01,
             "other_net": 403.85,
-            "net_income": 122270.86
+            "interest": 0.0,
+            "pretax_income": 122270.86,
+            "tax": 0.0,
+            "net_income": 122270.86,
+            "depreciation": 0.0
           },
           {
             "period": "2026-12-01",
@@ -2631,7 +2879,11 @@
             "opex": 121551.02,
             "operating_income": 128038.46,
             "other_net": 403.85,
-            "net_income": 128442.31
+            "interest": 0.0,
+            "pretax_income": 128442.31,
+            "tax": 0.0,
+            "net_income": 128442.31,
+            "depreciation": 0.0
           }
         ],
         "models": {
@@ -2829,7 +3081,8 @@
             "value": 0.05,
             "start": "2026-04-01",
             "end": null,
-            "label": null
+            "label": null,
+            "useful_life_months": null
           }
         ],
         "uncertainty": {
@@ -3250,6 +3503,7 @@
           "payables": 88526.24,
           "debt": 150000.0,
           "other_liability": 30000.0,
+          "tax_payable": 0.0,
           "total_liabilities": 268526.24,
           "equity": 842260.35,
           "check": 0.0
@@ -3266,6 +3520,7 @@
             "payables": 89021.42,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 269021.42,
             "equity": 905746.0,
             "check": 0.0
@@ -3281,6 +3536,7 @@
             "payables": 90728.32,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 270728.32,
             "equity": 973182.11,
             "check": 0.0
@@ -3296,6 +3552,7 @@
             "payables": 92473.47,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 272473.47,
             "equity": 1044725.72,
             "check": 0.0
@@ -3311,6 +3568,7 @@
             "payables": 95488.73,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 275488.73,
             "equity": 1129721.44,
             "check": 0.0
@@ -3326,6 +3584,7 @@
             "payables": 97353.75,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 277353.75,
             "equity": 1219456.5,
             "check": 0.0
@@ -3341,6 +3600,7 @@
             "payables": 99261.42,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 279261.42,
             "equity": 1314115.0,
             "check": 0.0
@@ -3356,6 +3616,7 @@
             "payables": 101212.87,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 281212.87,
             "equity": 1413887.5,
             "check": 0.0
@@ -3371,6 +3632,7 @@
             "payables": 103209.26,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 283209.26,
             "equity": 1518971.22,
             "check": 0.0
@@ -3386,6 +3648,7 @@
             "payables": 105251.78,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 285251.78,
             "equity": 1629570.27,
             "check": 0.0
@@ -3401,6 +3664,7 @@
             "payables": 107341.66,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 287341.66,
             "equity": 1745895.92,
             "check": 0.0
@@ -3416,6 +3680,7 @@
             "payables": 109480.17,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 289480.17,
             "equity": 1868166.78,
             "check": 0.0
@@ -3431,6 +3696,7 @@
             "payables": 111668.61,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 291668.61,
             "equity": 1996609.09,
             "check": 0.0
@@ -3444,6 +3710,7 @@
             "change_receivables": 2742.89,
             "change_inventory": 0.0,
             "change_payables": 495.18,
+            "change_tax_payable": 0.0,
             "operating": 66723.71,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3460,6 +3727,7 @@
             "change_receivables": -6600.03,
             "change_inventory": 0.0,
             "change_payables": 1706.9,
+            "change_tax_payable": 0.0,
             "operating": 62542.99,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3476,6 +3744,7 @@
             "change_receivables": -6816.39,
             "change_inventory": 0.0,
             "change_payables": 1745.16,
+            "change_tax_payable": 0.0,
             "operating": 66472.37,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3492,6 +3761,7 @@
             "change_receivables": -18129.43,
             "change_inventory": 0.0,
             "change_payables": 3015.25,
+            "change_tax_payable": 0.0,
             "operating": 69881.54,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3508,6 +3778,7 @@
             "change_receivables": -7634.14,
             "change_inventory": 0.0,
             "change_payables": 1865.02,
+            "change_tax_payable": 0.0,
             "operating": 83965.94,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3524,6 +3795,7 @@
             "change_receivables": -7884.4,
             "change_inventory": 0.0,
             "change_payables": 1907.67,
+            "change_tax_payable": 0.0,
             "operating": 88681.78,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3540,6 +3812,7 @@
             "change_receivables": -8142.86,
             "change_inventory": 0.0,
             "change_payables": 1951.45,
+            "change_tax_payable": 0.0,
             "operating": 93581.09,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3556,6 +3829,7 @@
             "change_receivables": -8409.79,
             "change_inventory": 0.0,
             "change_payables": 1996.39,
+            "change_tax_payable": 0.0,
             "operating": 98670.31,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3572,6 +3846,7 @@
             "change_receivables": -8685.48,
             "change_inventory": 0.0,
             "change_payables": 2042.52,
+            "change_tax_payable": 0.0,
             "operating": 103956.1,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3588,6 +3863,7 @@
             "change_receivables": -8970.2,
             "change_inventory": 0.0,
             "change_payables": 2089.88,
+            "change_tax_payable": 0.0,
             "operating": 109445.33,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3604,6 +3880,7 @@
             "change_receivables": -9264.25,
             "change_inventory": 0.0,
             "change_payables": 2138.51,
+            "change_tax_payable": 0.0,
             "operating": 115145.12,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3620,6 +3897,7 @@
             "change_receivables": -9567.95,
             "change_inventory": 0.0,
             "change_payables": 2188.44,
+            "change_tax_payable": 0.0,
             "operating": 121062.81,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -3669,7 +3947,7 @@
     {
       "name": "Growth halves",
       "forecast": {
-        "engine_version": "0.4.0",
+        "engine_version": "0.5.0",
         "last_actual_period": "2025-12-01",
         "history_months": 24,
         "drivers": {
@@ -3703,6 +3981,11 @@
             "method": "Average net other income of the last 6 months",
             "overridden": false
           },
+          "tax_rate": {
+            "value": 0.0,
+            "method": "No tax rows; set tax_rate to model income tax",
+            "overridden": false
+          },
           "dso_days": {
             "value": 30.40191112838716,
             "method": "receivables / monthly revenue x 30.4 days, last 3 months with balances",
@@ -3727,6 +4010,16 @@
             "value": 0.0,
             "method": "No depreciation in the income statement; tag depreciation accounts 'depreciation' to model it",
             "overridden": false
+          },
+          "useful_life_months": {
+            "value": 60.0,
+            "method": "Default 60 months (5 years) for capex above the baseline; override per scenario or per purchase",
+            "overridden": false
+          },
+          "interest_rate": {
+            "value": 0.0,
+            "method": "No interest rows; set interest_rate to charge interest on debt",
+            "overridden": false
           }
         },
         "formulas": {
@@ -3735,11 +4028,15 @@
           "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
           "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
           "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-          "net_income": "net_income[t] = operating_income[t] + other_net",
+          "interest": "interest[t] = debt[t-1] * interest_rate / 12 (recent average if there's no balance sheet)",
+          "tax": "tax[t] = tax_rate * max(0, pretax_income[t] - losses carried forward)",
+          "net_income": "net_income[t] = operating_income[t] + other_net - interest[t] - tax[t]",
           "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
           "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
           "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
-          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]",
+          "depreciation": "depreciation[t] = depreciation_monthly + extra capex / useful_life_months, from the month after purchase",
+          "tax_payable": "tax accrues monthly and is paid the month after each quarter end",
           "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
           "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
           "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
@@ -3754,7 +4051,11 @@
             "opex": 103621.88,
             "operating_income": 60373.09,
             "other_net": 403.85,
-            "net_income": 60776.94
+            "interest": 0.0,
+            "pretax_income": 60776.94,
+            "tax": 0.0,
+            "net_income": 60776.94,
+            "depreciation": 0.0
           },
           {
             "period": "2026-02-01",
@@ -3764,7 +4065,11 @@
             "opex": 105136.16,
             "operating_income": 61482.73,
             "other_net": 403.85,
-            "net_income": 61886.58
+            "interest": 0.0,
+            "pretax_income": 61886.58,
+            "tax": 0.0,
+            "net_income": 61886.58,
+            "depreciation": 0.0
           },
           {
             "period": "2026-03-01",
@@ -3774,7 +4079,11 @@
             "opex": 106672.57,
             "operating_income": 62612.22,
             "other_net": 403.85,
-            "net_income": 63016.07
+            "interest": 0.0,
+            "pretax_income": 63016.07,
+            "tax": 0.0,
+            "net_income": 63016.07,
+            "depreciation": 0.0
           },
           {
             "period": "2026-04-01",
@@ -3784,7 +4093,11 @@
             "opex": 108231.43,
             "operating_income": 63761.91,
             "other_net": 403.85,
-            "net_income": 64165.77
+            "interest": 0.0,
+            "pretax_income": 64165.77,
+            "tax": 0.0,
+            "net_income": 64165.77,
+            "depreciation": 0.0
           },
           {
             "period": "2026-05-01",
@@ -3794,7 +4107,11 @@
             "opex": 109813.07,
             "operating_income": 64932.16,
             "other_net": 403.85,
-            "net_income": 65336.02
+            "interest": 0.0,
+            "pretax_income": 65336.02,
+            "tax": 0.0,
+            "net_income": 65336.02,
+            "depreciation": 0.0
           },
           {
             "period": "2026-06-01",
@@ -3804,7 +4121,11 @@
             "opex": 111417.83,
             "operating_income": 66123.33,
             "other_net": 403.85,
-            "net_income": 66527.18
+            "interest": 0.0,
+            "pretax_income": 66527.18,
+            "tax": 0.0,
+            "net_income": 66527.18,
+            "depreciation": 0.0
           },
           {
             "period": "2026-07-01",
@@ -3814,7 +4135,11 @@
             "opex": 113046.04,
             "operating_income": 67335.78,
             "other_net": 403.85,
-            "net_income": 67739.63
+            "interest": 0.0,
+            "pretax_income": 67739.63,
+            "tax": 0.0,
+            "net_income": 67739.63,
+            "depreciation": 0.0
           },
           {
             "period": "2026-08-01",
@@ -3824,7 +4149,11 @@
             "opex": 114698.04,
             "operating_income": 68569.89,
             "other_net": 403.85,
-            "net_income": 68973.74
+            "interest": 0.0,
+            "pretax_income": 68973.74,
+            "tax": 0.0,
+            "net_income": 68973.74,
+            "depreciation": 0.0
           },
           {
             "period": "2026-09-01",
@@ -3834,7 +4163,11 @@
             "opex": 116374.18,
             "operating_income": 69826.03,
             "other_net": 403.85,
-            "net_income": 70229.89
+            "interest": 0.0,
+            "pretax_income": 70229.89,
+            "tax": 0.0,
+            "net_income": 70229.89,
+            "depreciation": 0.0
           },
           {
             "period": "2026-10-01",
@@ -3844,7 +4177,11 @@
             "opex": 118074.82,
             "operating_income": 71104.6,
             "other_net": 403.85,
-            "net_income": 71508.45
+            "interest": 0.0,
+            "pretax_income": 71508.45,
+            "tax": 0.0,
+            "net_income": 71508.45,
+            "depreciation": 0.0
           },
           {
             "period": "2026-11-01",
@@ -3854,7 +4191,11 @@
             "opex": 119800.31,
             "operating_income": 72405.98,
             "other_net": 403.85,
-            "net_income": 72809.83
+            "interest": 0.0,
+            "pretax_income": 72809.83,
+            "tax": 0.0,
+            "net_income": 72809.83,
+            "depreciation": 0.0
           },
           {
             "period": "2026-12-01",
@@ -3864,7 +4205,11 @@
             "opex": 121551.02,
             "operating_income": 73730.57,
             "other_net": 403.85,
-            "net_income": 74134.43
+            "interest": 0.0,
+            "pretax_income": 74134.43,
+            "tax": 0.0,
+            "net_income": 74134.43,
+            "depreciation": 0.0
           }
         ],
         "models": {
@@ -4398,6 +4743,7 @@
           "payables": 88526.24,
           "debt": 150000.0,
           "other_liability": 30000.0,
+          "tax_payable": 0.0,
           "total_liabilities": 268526.24,
           "equity": 842260.35,
           "check": 0.0
@@ -4414,6 +4760,7 @@
             "payables": 88658.32,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 268658.32,
             "equity": 903037.29,
             "check": 0.0
@@ -4429,6 +4776,7 @@
             "payables": 89984.41,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 269984.41,
             "equity": 964923.87,
             "check": 0.0
@@ -4444,6 +4792,7 @@
             "payables": 91330.36,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 271330.36,
             "equity": 1027939.95,
             "check": 0.0
@@ -4459,6 +4808,7 @@
             "payables": 92696.48,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 272696.48,
             "equity": 1092105.71,
             "check": 0.0
@@ -4474,6 +4824,7 @@
             "payables": 94083.07,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 274083.07,
             "equity": 1157441.73,
             "check": 0.0
@@ -4489,6 +4840,7 @@
             "payables": 95490.44,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 275490.44,
             "equity": 1223968.91,
             "check": 0.0
@@ -4504,6 +4856,7 @@
             "payables": 96918.89,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 276918.89,
             "equity": 1291708.55,
             "check": 0.0
@@ -4519,6 +4872,7 @@
             "payables": 98368.74,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 278368.74,
             "equity": 1360682.29,
             "check": 0.0
@@ -4534,6 +4888,7 @@
             "payables": 99840.31,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 279840.31,
             "equity": 1430912.18,
             "check": 0.0
@@ -4549,6 +4904,7 @@
             "payables": 101333.94,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 281333.94,
             "equity": 1502420.63,
             "check": 0.0
@@ -4564,6 +4920,7 @@
             "payables": 102849.95,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 282849.95,
             "equity": 1575230.46,
             "check": 0.0
@@ -4579,6 +4936,7 @@
             "payables": 104388.67,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 284388.67,
             "equity": 1649364.88,
             "check": 0.0
@@ -4592,6 +4950,7 @@
             "change_receivables": 6014.31,
             "change_inventory": 0.0,
             "change_payables": 132.08,
+            "change_tax_payable": 0.0,
             "operating": 66923.33,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4608,6 +4967,7 @@
             "change_receivables": -3169.03,
             "change_inventory": 0.0,
             "change_payables": 1326.09,
+            "change_tax_payable": 0.0,
             "operating": 60043.65,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4624,6 +4984,7 @@
             "change_receivables": -3219.73,
             "change_inventory": 0.0,
             "change_payables": 1345.96,
+            "change_tax_payable": 0.0,
             "operating": 61142.3,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4640,6 +5001,7 @@
             "change_receivables": -3271.25,
             "change_inventory": 0.0,
             "change_payables": 1366.12,
+            "change_tax_payable": 0.0,
             "operating": 62260.64,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4656,6 +5018,7 @@
             "change_receivables": -3323.59,
             "change_inventory": 0.0,
             "change_payables": 1386.59,
+            "change_tax_payable": 0.0,
             "operating": 63399.02,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4672,6 +5035,7 @@
             "change_receivables": -3376.76,
             "change_inventory": 0.0,
             "change_payables": 1407.36,
+            "change_tax_payable": 0.0,
             "operating": 64557.78,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4688,6 +5052,7 @@
             "change_receivables": -3430.79,
             "change_inventory": 0.0,
             "change_payables": 1428.45,
+            "change_tax_payable": 0.0,
             "operating": 65737.29,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4704,6 +5069,7 @@
             "change_receivables": -3485.68,
             "change_inventory": 0.0,
             "change_payables": 1449.85,
+            "change_tax_payable": 0.0,
             "operating": 66937.91,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4720,6 +5086,7 @@
             "change_receivables": -3541.45,
             "change_inventory": 0.0,
             "change_payables": 1471.58,
+            "change_tax_payable": 0.0,
             "operating": 68160.01,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4736,6 +5103,7 @@
             "change_receivables": -3598.12,
             "change_inventory": 0.0,
             "change_payables": 1493.63,
+            "change_tax_payable": 0.0,
             "operating": 69403.96,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4752,6 +5120,7 @@
             "change_receivables": -3655.69,
             "change_inventory": 0.0,
             "change_payables": 1516.01,
+            "change_tax_payable": 0.0,
             "operating": 70670.15,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4768,6 +5137,7 @@
             "change_receivables": -3714.18,
             "change_inventory": 0.0,
             "change_payables": 1538.72,
+            "change_tax_payable": 0.0,
             "operating": 71958.97,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -4817,7 +5187,7 @@
     {
       "name": "Raise 500k in June",
       "forecast": {
-        "engine_version": "0.4.0",
+        "engine_version": "0.5.0",
         "last_actual_period": "2025-12-01",
         "history_months": 24,
         "drivers": {
@@ -4851,6 +5221,11 @@
             "method": "Average net other income of the last 6 months",
             "overridden": false
           },
+          "tax_rate": {
+            "value": 0.0,
+            "method": "No tax rows; set tax_rate to model income tax",
+            "overridden": false
+          },
           "dso_days": {
             "value": 30.40191112838716,
             "method": "receivables / monthly revenue x 30.4 days, last 3 months with balances",
@@ -4875,6 +5250,16 @@
             "value": 0.0,
             "method": "No depreciation in the income statement; tag depreciation accounts 'depreciation' to model it",
             "overridden": false
+          },
+          "useful_life_months": {
+            "value": 60.0,
+            "method": "Default 60 months (5 years) for capex above the baseline; override per scenario or per purchase",
+            "overridden": false
+          },
+          "interest_rate": {
+            "value": 0.0,
+            "method": "No interest rows; set interest_rate to charge interest on debt",
+            "overridden": false
           }
         },
         "formulas": {
@@ -4883,12 +5268,16 @@
           "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
           "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
           "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-          "net_income": "net_income[t] = operating_income[t] + other_net + adjustments",
+          "interest": "interest[t] = debt[t-1] * interest_rate / 12 (recent average if there's no balance sheet)",
+          "tax": "tax[t] = tax_rate * max(0, pretax_income[t] - losses carried forward)",
+          "net_income": "net_income[t] = operating_income[t] + other_net - interest[t] - tax[t] + adjustments",
           "adjustments": "Each adjustment adds (currency/month) or scales (pct) its line from start through end",
           "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
           "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
           "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
-          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+          "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]",
+          "depreciation": "depreciation[t] = depreciation_monthly + extra capex / useful_life_months, from the month after purchase",
+          "tax_payable": "tax accrues monthly and is paid the month after each quarter end",
           "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
           "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
           "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
@@ -4903,7 +5292,11 @@
             "opex": 103621.88,
             "operating_income": 63081.79,
             "other_net": 403.85,
-            "net_income": 63485.65
+            "interest": 0.0,
+            "pretax_income": 63485.65,
+            "tax": 0.0,
+            "net_income": 63485.65,
+            "depreciation": 0.0
           },
           {
             "period": "2026-02-01",
@@ -4913,7 +5306,11 @@
             "opex": 105136.16,
             "operating_income": 67032.27,
             "other_net": 403.85,
-            "net_income": 67436.12
+            "interest": 0.0,
+            "pretax_income": 67436.12,
+            "tax": 0.0,
+            "net_income": 67436.12,
+            "depreciation": 0.0
           },
           {
             "period": "2026-03-01",
@@ -4923,7 +5320,11 @@
             "opex": 106672.57,
             "operating_income": 71139.75,
             "other_net": 403.85,
-            "net_income": 71543.61
+            "interest": 0.0,
+            "pretax_income": 71543.61,
+            "tax": 0.0,
+            "net_income": 71543.61,
+            "depreciation": 0.0
           },
           {
             "period": "2026-04-01",
@@ -4933,7 +5334,11 @@
             "opex": 108231.43,
             "operating_income": 75409.8,
             "other_net": 403.85,
-            "net_income": 75813.65
+            "interest": 0.0,
+            "pretax_income": 75813.65,
+            "tax": 0.0,
+            "net_income": 75813.65,
+            "depreciation": 0.0
           },
           {
             "period": "2026-05-01",
@@ -4943,7 +5348,11 @@
             "opex": 109813.07,
             "operating_income": 79848.15,
             "other_net": 403.85,
-            "net_income": 80252.0
+            "interest": 0.0,
+            "pretax_income": 80252.0,
+            "tax": 0.0,
+            "net_income": 80252.0,
+            "depreciation": 0.0
           },
           {
             "period": "2026-06-01",
@@ -4953,7 +5362,11 @@
             "opex": 111417.83,
             "operating_income": 84460.72,
             "other_net": 403.85,
-            "net_income": 84864.58
+            "interest": 0.0,
+            "pretax_income": 84864.58,
+            "tax": 0.0,
+            "net_income": 84864.58,
+            "depreciation": 0.0
           },
           {
             "period": "2026-07-01",
@@ -4963,7 +5376,11 @@
             "opex": 113046.04,
             "operating_income": 89253.66,
             "other_net": 403.85,
-            "net_income": 89657.51
+            "interest": 0.0,
+            "pretax_income": 89657.51,
+            "tax": 0.0,
+            "net_income": 89657.51,
+            "depreciation": 0.0
           },
           {
             "period": "2026-08-01",
@@ -4973,7 +5390,11 @@
             "opex": 114698.04,
             "operating_income": 94233.3,
             "other_net": 403.85,
-            "net_income": 94637.15
+            "interest": 0.0,
+            "pretax_income": 94637.15,
+            "tax": 0.0,
+            "net_income": 94637.15,
+            "depreciation": 0.0
           },
           {
             "period": "2026-09-01",
@@ -4983,7 +5404,11 @@
             "opex": 116374.18,
             "operating_income": 99406.18,
             "other_net": 403.85,
-            "net_income": 99810.04
+            "interest": 0.0,
+            "pretax_income": 99810.04,
+            "tax": 0.0,
+            "net_income": 99810.04,
+            "depreciation": 0.0
           },
           {
             "period": "2026-10-01",
@@ -4993,7 +5418,11 @@
             "opex": 118074.82,
             "operating_income": 104779.1,
             "other_net": 403.85,
-            "net_income": 105182.95
+            "interest": 0.0,
+            "pretax_income": 105182.95,
+            "tax": 0.0,
+            "net_income": 105182.95,
+            "depreciation": 0.0
           },
           {
             "period": "2026-11-01",
@@ -5003,7 +5432,11 @@
             "opex": 119800.31,
             "operating_income": 110359.04,
             "other_net": 403.85,
-            "net_income": 110762.89
+            "interest": 0.0,
+            "pretax_income": 110762.89,
+            "tax": 0.0,
+            "net_income": 110762.89,
+            "depreciation": 0.0
           },
           {
             "period": "2026-12-01",
@@ -5013,7 +5446,11 @@
             "opex": 121551.02,
             "operating_income": 116153.25,
             "other_net": 403.85,
-            "net_income": 116557.1
+            "interest": 0.0,
+            "pretax_income": 116557.1,
+            "tax": 0.0,
+            "net_income": 116557.1,
+            "depreciation": 0.0
           }
         ],
         "models": {
@@ -5211,7 +5648,8 @@
             "value": 500000.0,
             "start": "2026-06-01",
             "end": "2026-06-01",
-            "label": null
+            "label": null,
+            "useful_life_months": null
           }
         ],
         "uncertainty": {
@@ -5632,6 +6070,7 @@
           "payables": 88526.24,
           "debt": 150000.0,
           "other_liability": 30000.0,
+          "tax_payable": 0.0,
           "total_liabilities": 268526.24,
           "equity": 842260.35,
           "check": 0.0
@@ -5648,6 +6087,7 @@
             "payables": 89021.42,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 269021.42,
             "equity": 905746.0,
             "check": 0.0
@@ -5663,6 +6103,7 @@
             "payables": 90728.32,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 270728.32,
             "equity": 973182.11,
             "check": 0.0
@@ -5678,6 +6119,7 @@
             "payables": 92473.47,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 272473.47,
             "equity": 1044725.72,
             "check": 0.0
@@ -5693,6 +6135,7 @@
             "payables": 94257.88,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 274257.88,
             "equity": 1120539.37,
             "check": 0.0
@@ -5708,6 +6151,7 @@
             "payables": 96082.55,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 276082.55,
             "equity": 1200791.37,
             "check": 0.0
@@ -5723,6 +6167,7 @@
             "payables": 97948.55,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 277948.55,
             "equity": 1785655.95,
             "check": 0.0
@@ -5738,6 +6183,7 @@
             "payables": 99856.97,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 279856.97,
             "equity": 1875313.46,
             "check": 0.0
@@ -5753,6 +6199,7 @@
             "payables": 101808.9,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 281808.9,
             "equity": 1969950.61,
             "check": 0.0
@@ -5768,6 +6215,7 @@
             "payables": 103805.52,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 283805.52,
             "equity": 2069760.65,
             "check": 0.0
@@ -5783,6 +6231,7 @@
             "payables": 105847.99,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 285847.99,
             "equity": 2174943.6,
             "check": 0.0
@@ -5798,6 +6247,7 @@
             "payables": 107937.53,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 287937.53,
             "equity": 2285706.49,
             "check": 0.0
@@ -5813,6 +6263,7 @@
             "payables": 110075.41,
             "debt": 150000.0,
             "other_liability": 30000.0,
+            "tax_payable": 0.0,
             "total_liabilities": 290075.41,
             "equity": 2402263.59,
             "check": 0.0
@@ -5826,6 +6277,7 @@
             "change_receivables": 2742.89,
             "change_inventory": 0.0,
             "change_payables": 495.18,
+            "change_tax_payable": 0.0,
             "operating": 66723.71,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5842,6 +6294,7 @@
             "change_receivables": -6600.03,
             "change_inventory": 0.0,
             "change_payables": 1706.9,
+            "change_tax_payable": 0.0,
             "operating": 62542.99,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5858,6 +6311,7 @@
             "change_receivables": -6816.39,
             "change_inventory": 0.0,
             "change_payables": 1745.16,
+            "change_tax_payable": 0.0,
             "operating": 66472.37,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5874,6 +6328,7 @@
             "change_receivables": -7039.84,
             "change_inventory": 0.0,
             "change_payables": 1784.4,
+            "change_tax_payable": 0.0,
             "operating": 70558.22,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5890,6 +6345,7 @@
             "change_receivables": -7270.61,
             "change_inventory": 0.0,
             "change_payables": 1824.68,
+            "change_tax_payable": 0.0,
             "operating": 74806.06,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5906,6 +6362,7 @@
             "change_receivables": -7508.95,
             "change_inventory": 0.0,
             "change_payables": 1866.0,
+            "change_tax_payable": 0.0,
             "operating": 79221.63,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5922,6 +6379,7 @@
             "change_receivables": -7755.11,
             "change_inventory": 0.0,
             "change_payables": 1908.41,
+            "change_tax_payable": 0.0,
             "operating": 83810.82,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5938,6 +6396,7 @@
             "change_receivables": -8009.33,
             "change_inventory": 0.0,
             "change_payables": 1951.94,
+            "change_tax_payable": 0.0,
             "operating": 88579.76,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5954,6 +6413,7 @@
             "change_receivables": -8271.88,
             "change_inventory": 0.0,
             "change_payables": 1996.61,
+            "change_tax_payable": 0.0,
             "operating": 93534.77,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5970,6 +6430,7 @@
             "change_receivables": -8543.05,
             "change_inventory": 0.0,
             "change_payables": 2042.47,
+            "change_tax_payable": 0.0,
             "operating": 98682.38,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -5986,6 +6447,7 @@
             "change_receivables": -8823.1,
             "change_inventory": 0.0,
             "change_payables": 2089.55,
+            "change_tax_payable": 0.0,
             "operating": 104029.34,
             "capex": -2000.0,
             "investing": -2000.0,
@@ -6002,6 +6464,7 @@
             "change_receivables": -9112.33,
             "change_inventory": 0.0,
             "change_payables": 2137.87,
+            "change_tax_payable": 0.0,
             "operating": 109582.64,
             "capex": -2000.0,
             "investing": -2000.0,

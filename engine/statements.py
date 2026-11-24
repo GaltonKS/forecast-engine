@@ -7,11 +7,17 @@ Starting from the balance sheet at the last actual month:
     payables[t]    = (cogs[t] + opex[t] - depreciation[t]) * dpo_days / DAYS
     fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]
     debt[t]        = debt[t-1] + borrowed[t] - repaid[t]
+    tax_payable[t] = tax_payable[t-1] + tax[t] - paid[t]   (paid quarterly)
     equity[t]      = equity[t-1] + net_income[t] + raised[t]
     other assets and other liabilities stay at their opening values
 
+    interest[t] = debt[t-1] * interest_rate / 12
+    tax[t]      = tax_rate * taxable profit, after losses carried forward
+    depreciation[t] = depreciation_monthly + straight-line depreciation of
+                      capex above the fitted baseline, over its useful life
+
     operating = net_income + depreciation - change in receivables
-                - change in inventory + change in payables
+                - change in inventory + change in payables + change in tax payable
     investing = -capex
     financing = borrowed - repaid + raised
     cash[t]   = cash[t-1] + operating + investing + financing
@@ -41,7 +47,11 @@ from .schema import (
 from .simulate import adjustment_mask
 
 DAYS = 365 / 12  # average days per month
-BALANCE_DRIVERS = ("dso_days", "dio_days", "dpo_days", "capex_monthly", "depreciation_monthly")
+BALANCE_DRIVERS = (
+    "dso_days", "dio_days", "dpo_days", "capex_monthly", "depreciation_monthly", "useful_life_months", "interest_rate",
+)
+DEFAULT_USEFUL_LIFE = 60
+TAX_PAYMENT_MONTHS = (1, 4, 7, 10)  # tax owed at the end of a quarter is paid the month after
 CASH_LINES = ("capex", "debt", "equity")
 
 
@@ -130,7 +140,98 @@ def fit_balance_drivers(
         out["capex_monthly"] = FittedDriver(
             value=dep, method="Assumed equal to depreciation (fixed assets held level): no consecutive balances"
         )
+    out["useful_life_months"] = FittedDriver(
+        value=DEFAULT_USEFUL_LIFE,
+        method=f"Default {DEFAULT_USEFUL_LIFE} months (5 years) for capex above the baseline; override per scenario or per purchase",
+    )
+    debt_prev = b["debt"].shift(1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rates = (monthly["interest"] / debt_prev.where(debt_prev > 0)) * 12
+    rate = _recent(rates[monthly["interest"] > 0])
+    if rate is not None:
+        out["interest_rate"] = FittedDriver(
+            value=rate, method="Annualised interest / previous month's debt, last 3 months with both"
+        )
+    elif (monthly["interest"] > 0).any():
+        out["interest_rate"] = FittedDriver(value=0.0, method="Interest rows but no debt balances the month before")
+    else:
+        out["interest_rate"] = FittedDriver(
+            value=0.0, method="No interest rows; set interest_rate to charge interest on debt"
+        )
     return {k: out[k] for k in BALANCE_DRIVERS}
+
+
+def fit_tax_rate(monthly: pd.DataFrame) -> FittedDriver:
+    """Effective rate: tax / pre-tax profit over the last 12 months."""
+    t = monthly.tail(12)
+    pretax = (t["revenue"] - t["cogs"] - t["opex"] + t["other"] - t["interest"]).sum()
+    tax = t["tax"].sum()
+    if tax <= 0:
+        return FittedDriver(value=0.0, method="No tax rows; set tax_rate to model income tax")
+    if pretax <= 0:
+        return FittedDriver(value=0.0, method="Tax rows, but no pre-tax profit in the last 12 months to measure a rate")
+    rate = float(min(max(tax / pretax, 0.0), 0.6))
+    return FittedDriver(value=rate, method=f"Tax / pre-tax profit over the last {len(t)} months (effective rate)")
+
+
+def debt_path(opening: "Opening | None", adjustments: list[Adjustment], periods: pd.DatetimeIndex) -> np.ndarray:
+    start = opening.values["debt"] if opening else 0.0
+    return start + np.cumsum(cash_line("debt", adjustments, periods))
+
+
+def interest_path(
+    opening: "Opening | None", drivers, adjustments: list[Adjustment], periods: pd.DatetimeIndex,
+    flat_interest: float = 0.0,
+) -> np.ndarray:
+    """With a balance sheet: last month's debt x rate / 12. Without one: the
+    recent average interest, held flat."""
+    if opening is None:
+        return np.full(len(periods), flat_interest)
+    debt = debt_path(opening, adjustments, periods)
+    prev = np.concatenate([[opening.values["debt"]], debt[:-1]])
+    return np.clip(prev, 0, None) * drivers.interest_rate / 12
+
+
+def capex_and_new_depreciation(
+    drivers, fitted_capex: float, adjustments: list[Adjustment], periods: pd.DatetimeIndex
+) -> tuple[np.ndarray, np.ndarray]:
+    """Total capex per month, and depreciation on capex above the fitted
+    baseline (baseline capex is already reflected in historical opex).
+    Each month's extra capex depreciates straight-line from the next month."""
+    h = len(periods)
+    capex = drivers.capex_monthly + cash_line("capex", adjustments, periods)
+    new_dep = np.zeros(h)
+
+    def depreciate(amounts: np.ndarray, life: float):
+        for start in np.nonzero(amounts)[0]:
+            end = min(h, start + 1 + int(np.ceil(life)))
+            new_dep[start + 1:end] += amounts[start] / life
+
+    base_extra = drivers.capex_monthly - fitted_capex
+    if abs(base_extra) > 1e-9:
+        depreciate(np.full(h, base_extra), drivers.useful_life_months)
+    for a in adjustments:
+        if a.line == "capex":
+            amounts = np.where(adjustment_mask(a, periods), a.value, 0.0)
+            depreciate(amounts, a.useful_life_months or drivers.useful_life_months)
+    return capex, new_dep
+
+
+def tax_schedule(pretax: np.ndarray, rate: float) -> np.ndarray:
+    """Tax on profit with losses carried forward (no refunds). Works on
+    (months,) or (paths, months); returns the same shape."""
+    pretax = np.asarray(pretax, dtype=float)
+    p2 = pretax.reshape(-1, pretax.shape[-1])
+    tax = np.zeros_like(p2)
+    if rate > 0:
+        pool = np.zeros(p2.shape[0])
+        for t in range(p2.shape[1]):
+            pool = pool + np.clip(-p2[:, t], 0, None)
+            profit = np.clip(p2[:, t], 0, None)
+            used = np.minimum(pool, profit)
+            pool = pool - used
+            tax[:, t] = rate * (profit - used)
+    return tax.reshape(pretax.shape)
 
 
 def cash_line(line: str, adjustments: list[Adjustment], periods: pd.DatetimeIndex) -> np.ndarray:
@@ -144,33 +245,46 @@ def cash_line(line: str, adjustments: list[Adjustment], periods: pd.DatetimeInde
 def project(
     opening: Opening,
     drivers,
-    revenue: np.ndarray,
-    cogs: np.ndarray,
-    opex: np.ndarray,
-    other: np.ndarray,
+    pl: dict[str, np.ndarray],
+    capex: np.ndarray,
     adjustments: list[Adjustment],
     periods: pd.DatetimeIndex,
 ) -> dict[str, np.ndarray]:
-    """All balance sheet and cash flow lines, shape like `revenue`."""
+    """All balance sheet and cash flow lines, shaped like pl["revenue"].
+
+    pl holds the finished income statement: revenue, cogs, opex (including
+    all depreciation), depreciation, tax and net_income."""
     o = opening.values
+    revenue, cogs, opex = pl["revenue"], pl["cogs"], pl["opex"]
     shape = revenue.shape
-    dep = np.broadcast_to(drivers.depreciation_monthly, shape)
-    capex = drivers.capex_monthly + cash_line("capex", adjustments, periods)
+    dep = np.broadcast_to(pl["depreciation"], shape)
+    tax = np.broadcast_to(pl["tax"], shape)
+    net_income = pl["net_income"]
     capex = np.broadcast_to(capex, shape)
     borrowed = np.broadcast_to(cash_line("debt", adjustments, periods), shape)
     raised = np.broadcast_to(cash_line("equity", adjustments, periods), shape)
 
-    net_income = revenue - cogs - opex + other
     receivables = revenue * drivers.dso_days / DAYS
     inventory = cogs * drivers.dio_days / DAYS
     payables = np.clip(cogs + opex - dep, 0, None) * drivers.dpo_days / DAYS
+
+    # tax: accrues monthly, paid the month after each quarter end
+    pay_month = np.isin(periods.month, TAX_PAYMENT_MONTHS)
+    tax_payable = np.empty(shape)
+    owed = np.full(shape[:-1], o["tax_payable"])
+    for t in range(shape[-1]):
+        if pay_month[t]:
+            owed = np.zeros(shape[:-1])
+        owed = owed + tax[..., t]
+        tax_payable[..., t] = owed
 
     def change(x, start):
         prev = np.concatenate([np.full(shape[:-1] + (1,), start), x[..., :-1]], axis=-1)
         return x - prev
 
     d_rec, d_inv, d_pay = change(receivables, o["receivables"]), change(inventory, o["inventory"]), change(payables, o["payables"])
-    operating = net_income + dep - d_rec - d_inv + d_pay
+    d_tax = change(tax_payable, o["tax_payable"])
+    operating = net_income + dep - d_rec - d_inv + d_pay + d_tax
     investing = -capex
     financing = borrowed + raised
     net_change = operating + investing + financing
@@ -182,14 +296,14 @@ def project(
     other_assets = np.full(shape, o["other_assets"])
     other_liability = np.full(shape, o["other_liability"])
     total_assets = cash + receivables + inventory + fixed_assets + other_assets
-    total_liabilities = payables + debt + other_liability
+    total_liabilities = payables + debt + other_liability + tax_payable
     return dict(
         cash=cash, receivables=receivables, inventory=inventory, fixed_assets=fixed_assets,
         other_assets=other_assets, total_assets=total_assets, payables=payables, debt=debt,
-        other_liability=other_liability, total_liabilities=total_liabilities, equity=equity,
+        other_liability=other_liability, tax_payable=tax_payable, total_liabilities=total_liabilities, equity=equity,
         check=total_assets - total_liabilities - equity,
         net_income=net_income, depreciation=dep, change_receivables=-d_rec, change_inventory=-d_inv,
-        change_payables=d_pay, operating=operating, capex=-capex, investing=investing,
+        change_payables=d_pay, change_tax_payable=d_tax, operating=operating, capex=-capex, investing=investing,
         debt_flow=borrowed, equity_flow=raised, financing=financing, net_change=net_change,
     )
 
@@ -219,7 +333,7 @@ def to_models(opening: Opening, s: dict[str, np.ndarray], periods: pd.DatetimeIn
         check=_r(assets - liabilities - o["equity"]),
     )
     bs_keys = ("cash", "receivables", "inventory", "fixed_assets", "other_assets", "total_assets",
-               "payables", "debt", "other_liability", "total_liabilities", "equity", "check")
+               "payables", "debt", "other_liability", "tax_payable", "total_liabilities", "equity", "check")
     balance_sheet = [
         BalanceSheetMonth(period=p.date(), **{k: _r(s[k][i]) for k in bs_keys}) for i, p in enumerate(periods)
     ]
@@ -228,7 +342,8 @@ def to_models(opening: Opening, s: dict[str, np.ndarray], periods: pd.DatetimeIn
             period=p.date(),
             net_income=_r(s["net_income"][i]), depreciation=_r(s["depreciation"][i]),
             change_receivables=_r(s["change_receivables"][i]), change_inventory=_r(s["change_inventory"][i]),
-            change_payables=_r(s["change_payables"][i]), operating=_r(s["operating"][i]),
+            change_payables=_r(s["change_payables"][i]), change_tax_payable=_r(s["change_tax_payable"][i]),
+            operating=_r(s["operating"][i]),
             capex=_r(s["capex"][i]), investing=_r(s["investing"][i]),
             debt=_r(s["debt_flow"][i]), equity=_r(s["equity_flow"][i]), financing=_r(s["financing"][i]),
             net_change=_r(s["net_change"][i]), ending_cash=_r(s["cash"][i]),

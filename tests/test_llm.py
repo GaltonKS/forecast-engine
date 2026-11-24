@@ -26,7 +26,8 @@ MONTHLY = to_monthly(load_csv(SAMPLE))
 MONTHLY_B, BALANCES = sample_data()
 CASES = {c["id"]: c for c in load_cases()}
 EMPTY_OV = dict(revenue_base=None, revenue_growth=None, gross_margin=None, opex_base=None, opex_growth=None, other_net=None,
-                dso_days=None, dio_days=None, dpo_days=None, capex_monthly=None, depreciation_monthly=None)
+                dso_days=None, dio_days=None, dpo_days=None, capex_monthly=None, depreciation_monthly=None,
+                useful_life_months=None, interest_rate=None, tax_rate=None)
 
 
 def reply(content, finish="stop", status=200):
@@ -63,8 +64,8 @@ def scenario(name="S", adjustments=(), **overrides):
     return dict(name=name, overrides={**EMPTY_OV, **overrides}, adjustments=list(adjustments))
 
 
-def adj(line="opex", kind="add", value=1000, start="2026-03", end=None, label="a"):
-    return dict(line=line, kind=kind, value=value, start=start, end=end, label=label)
+def adj(line="opex", kind="add", value=1000, start="2026-03", end=None, label="a", life=None):
+    return dict(line=line, kind=kind, value=value, start=start, end=end, label=label, useful_life_months=life)
 
 
 # ---------- the request we send ----------
@@ -248,3 +249,25 @@ def test_eval_flags_unexpected_extras():
 def test_money_formatting():
     assert fmt(1_057_306) == "1.06M" and fmt(-300_000, signed=True) == "-300k"
     assert fmt(94_320, signed=True) == "+94k" and fmt(0, signed=True) == "0"
+
+
+def test_useful_life_kept_for_capex_only():
+    out = output(scenarios=[scenario(adjustments=[
+        adj(line="capex", value=90000, start="2026-03", end="2026-03", label="Machine", life=36),
+        adj(line="opex", value=1000, label="Rent", life=24),  # nonsense on opex: dropped
+    ])])
+    t, _ = scripted(reply(out))
+    interp, _, _ = interpret("x", MONTHLY_B, cfg(t), balances=BALANCES)
+    lives = {a.label: a.useful_life_months for a in interp.scenarios[0].adjustments}
+    assert lives == {"Machine": 36, "Rent": None}
+
+
+def test_percentage_typed_interest_rate_is_flagged():
+    t, _ = scripted(reply(output(scenarios=[scenario("Loan", interest_rate=0.9)])))
+    _, warnings, _ = interpret("x", MONTHLY_B, cfg(t), balances=BALANCES)
+    assert any("interest_rate of 90%" in w for w in warnings)
+
+
+def test_context_shows_tax_and_interest_rates():
+    text = render_context(build_context(MONTHLY_B, BALANCES))
+    assert "tax_rate       = 0.0000 on profit" in text and "interest_rate = 0.0000 per year on debt" in text

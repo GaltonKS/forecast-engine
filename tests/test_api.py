@@ -306,7 +306,8 @@ def fake_llm(monkeypatch):
 
     def use(replies=None, transport=None):
         t = transport or fake_transport(replies)
-        monkeypatch.setattr(jobs_mod, "llm_config", lambda: LLMConfig(base_url="http://llm.test/v1", model="fake", transport=t))
+        monkeypatch.setattr(jobs_mod, "llm_config", lambda: LLMConfig(
+            base_url="http://llm.test/v1", model="fake", transport=t, timeout_seconds=1))
 
     use()
     return use
@@ -368,7 +369,7 @@ def test_query_fails_cleanly_when_model_is_down(client, tenant, fake_llm):
     fake_llm(transport=httpx.MockTransport(lambda req: httpx.Response(503, text="cold start")))
     upload(client, tenant, SAMPLE.read_bytes())
     job = ask(client, tenant, "Raise prices 5% starting in April")
-    assert job["status"] == "failed" and job["error"] == "Model endpoint returned 503"
+    assert job["status"] == "failed" and job["error"].startswith("Model endpoint returned 503; still unavailable")
     assert client.get(f"/tenants/{tenant}/forecasts", headers=H).json() == []
 
 

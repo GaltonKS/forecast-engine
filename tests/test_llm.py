@@ -30,6 +30,22 @@ EMPTY_OV = dict(revenue_base=None, revenue_growth=None, gross_margin=None, opex_
                 useful_life_months=None, interest_rate=None, tax_rate=None)
 
 
+@pytest.fixture(autouse=True)
+def fake_clock(monkeypatch):
+    """Retries wait on a fake clock, so cold-start tests run instantly."""
+    import llm.client as client
+
+    clock = {"t": 0.0, "slept": []}
+    monkeypatch.setattr(client, "_now", lambda: clock["t"])
+
+    def sleep(s):
+        clock["slept"].append(s)
+        clock["t"] += s
+
+    monkeypatch.setattr(client, "_sleep", sleep)
+    return clock
+
+
 def reply(content, finish="stop", status=200):
     return httpx.Response(status, json={
         "choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": finish}],
@@ -188,16 +204,33 @@ def test_not_configured():
 
 
 @pytest.mark.parametrize("response, error, msg", [
-    (httpx.Response(503, text="loading"), LLMUnavailable, "returned 503"),
-    (httpx.Response(429, text="slow down"), LLMUnavailable, "returned 429"),
+    (httpx.Response(503, text="loading"), LLMUnavailable, "returned 503; still unavailable after 30s"),
+    (httpx.Response(429, text="slow down"), LLMUnavailable, "returned 429; still unavailable after 30s"),
     (httpx.Response(401, text="bad key"), LLMUnavailable, "rejected the request (401)"),
     (httpx.Response(200, text="<html>"), LLMBadOutput, "unexpected format"),
     (reply("{", finish="length"), LLMBadOutput, "cut off"),
 ])
 def test_endpoint_errors_have_clear_messages(response, error, msg):
-    t, _ = scripted(response)
+    t = httpx.MockTransport(lambda request: response)  # same answer every time
     with pytest.raises(error, match=re.escape(msg)):
-        interpret("anything", MONTHLY, cfg(t))
+        interpret("anything", MONTHLY, cfg(t, timeout_seconds=30))
+
+
+def test_cold_start_is_waited_out(fake_clock):
+    good = reply(json.dumps(CASES["margin"]["ideal"]))
+    t, seen = scripted(httpx.Response(503), httpx.Response(503), httpx.Response(502), good)
+    interp, _, call = interpret("anything", MONTHLY, cfg(t, timeout_seconds=300))
+    assert interp.scenarios[0].overrides.gross_margin == 0.75
+    assert len(seen) == 4 and fake_clock["slept"] == [2.0, 4.0, 8.0]  # backoff
+    assert call.latency_seconds == pytest.approx(14.0)
+
+
+def test_backoff_stops_at_the_deadline(fake_clock):
+    t = httpx.MockTransport(lambda request: httpx.Response(503))
+    with pytest.raises(LLMUnavailable, match="still unavailable after 60s"):
+        interpret("anything", MONTHLY, cfg(t, timeout_seconds=60))
+    assert sum(fake_clock["slept"]) == pytest.approx(60)
+    assert max(fake_clock["slept"]) == 15.0  # capped
 
 
 def test_timeout_and_unreachable():
@@ -210,8 +243,8 @@ def test_timeout_and_unreachable():
     def refused(request):
         raise httpx.ConnectError("refused", request=request)
 
-    with pytest.raises(LLMUnavailable, match="unreachable"):
-        interpret("x", MONTHLY, cfg(httpx.MockTransport(refused)))
+    with pytest.raises(LLMUnavailable, match=r"unreachable \(ConnectError\); still unavailable after 20s"):
+        interpret("x", MONTHLY, cfg(httpx.MockTransport(refused), timeout_seconds=20))
 
 
 # ---------- eval harness ----------

@@ -43,7 +43,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -52,7 +55,8 @@
         "value": 20000,
         "start": "2026-03",
         "end": null,
-        "label": "Two engineers"
+        "label": "Two engineers",
+        "useful_life_months": null
        }
       ]
      }
@@ -100,7 +104,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -109,7 +116,8 @@
         "value": 0.05,
         "start": "2026-04",
         "end": null,
-        "label": "5% price rise"
+        "label": "5% price rise",
+        "useful_life_months": null
        }
       ]
      }
@@ -153,7 +161,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": []
      }
@@ -197,7 +208,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": []
      }
@@ -241,7 +255,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": []
      }
@@ -302,7 +319,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -311,7 +331,8 @@
         "value": 20000,
         "start": "2026-03",
         "end": null,
-        "label": "2 engineers"
+        "label": "2 engineers",
+        "useful_life_months": null
        }
       ]
      },
@@ -328,7 +349,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -337,7 +361,8 @@
         "value": 40000,
         "start": "2026-03",
         "end": null,
-        "label": "4 engineers"
+        "label": "4 engineers",
+        "useful_life_months": null
        }
       ]
      }
@@ -385,7 +410,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -394,7 +422,8 @@
         "value": -15000,
         "start": "2026-06",
         "end": null,
-        "label": "Lost customer"
+        "label": "Lost customer",
+        "useful_life_months": null
        }
       ]
      }
@@ -442,7 +471,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -451,7 +483,8 @@
         "value": -20000,
         "start": "2026-07",
         "end": "2026-09",
-        "label": "Marketing cut"
+        "label": "Marketing cut",
+        "useful_life_months": null
        }
       ]
      }
@@ -499,7 +532,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -508,7 +544,8 @@
         "value": 50000,
         "start": "2026-05",
         "end": "2026-05",
-        "label": "Legal bill"
+        "label": "Legal bill",
+        "useful_life_months": null
        }
       ]
      }
@@ -552,7 +589,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": []
      }
@@ -602,7 +642,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -611,7 +654,8 @@
         "value": 0.1,
         "start": "2026-02",
         "end": null,
-        "label": "Hosting +10%"
+        "label": "Hosting +10%",
+        "useful_life_months": null
        }
       ]
      }
@@ -667,7 +711,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -676,7 +723,8 @@
         "value": 20000,
         "start": "2026-03",
         "end": null,
-        "label": "2 engineers"
+        "label": "2 engineers",
+        "useful_life_months": null
        },
        {
         "line": "revenue",
@@ -684,7 +732,8 @@
         "value": 0.05,
         "start": "2026-04",
         "end": null,
-        "label": "Price rise"
+        "label": "Price rise",
+        "useful_life_months": null
        }
       ]
      }
@@ -805,7 +854,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": []
      }
@@ -853,7 +905,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -862,7 +917,8 @@
         "value": 500000,
         "start": "2026-06",
         "end": "2026-06",
-        "label": "Funding round"
+        "label": "Funding round",
+        "useful_life_months": null
        }
       ]
      }
@@ -903,7 +959,7 @@
     "intent": "scenarios",
     "explanation": "Borrow 200k in March 2026, repay 10k/month from April.",
     "assumptions": [
-     "Interest isn't included; add it to other expenses if needed"
+     "The loan's interest rate isn't given, so the current rate on debt is used"
     ],
     "horizon_months": null,
     "scenarios": [
@@ -920,7 +976,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -929,7 +988,8 @@
         "value": 200000,
         "start": "2026-03",
         "end": "2026-03",
-        "label": "Loan drawn"
+        "label": "Loan drawn",
+        "useful_life_months": null
        },
        {
         "line": "debt",
@@ -937,7 +997,8 @@
         "value": -10000,
         "start": "2026-04",
         "end": null,
-        "label": "Repayments"
+        "label": "Repayments",
+        "useful_life_months": null
        }
       ]
      }
@@ -985,7 +1046,10 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": [
        {
@@ -994,7 +1058,8 @@
         "value": 80000,
         "start": "2026-04",
         "end": "2026-04",
-        "label": "Equipment purchase"
+        "label": "Equipment purchase",
+        "useful_life_months": null
        }
       ]
      }
@@ -1038,9 +1103,189 @@
        "dio_days": null,
        "dpo_days": null,
        "capex_monthly": null,
-       "depreciation_monthly": null
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
       },
       "adjustments": []
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "tax-rate",
+   "prompt": "What if we have to pay 25% corporate tax?",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {
+       "tax_rate": [
+        0.25,
+        0.001
+       ]
+      },
+      "adjustments": []
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "Income tax at 25% of profit.",
+    "assumptions": [],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "25% tax",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": 0.25
+      },
+      "adjustments": []
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "loan-with-rate",
+   "prompt": "Borrow 300k in May at 9% interest",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {
+       "interest_rate": [
+        0.09,
+        0.001
+       ]
+      },
+      "adjustments": [
+       {
+        "line": "debt",
+        "kind": "add",
+        "value": 300000,
+        "start": "2026-05",
+        "end": "2026-05",
+        "rel_tol": 0.01
+       }
+      ]
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "A 300k loan drawn in May 2026 at 9% a year.",
+    "assumptions": [
+     "9% applies to all debt, including the existing loan"
+    ],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "300k loan at 9%",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": 0.09,
+       "tax_rate": null
+      },
+      "adjustments": [
+       {
+        "line": "debt",
+        "kind": "add",
+        "value": 300000,
+        "start": "2026-05",
+        "end": "2026-05",
+        "label": "Loan",
+        "useful_life_months": null
+       }
+      ]
+     }
+    ],
+    "unsupported_reason": null
+   }
+  },
+  {
+   "id": "equipment-life",
+   "prompt": "Buy a 90k machine in March that will last 3 years",
+   "expect": {
+    "intent": "scenarios",
+    "scenarios": [
+     {
+      "overrides": {},
+      "adjustments": [
+       {
+        "line": "capex",
+        "kind": "add",
+        "value": 90000,
+        "start": "2026-03",
+        "end": "2026-03",
+        "rel_tol": 0.01,
+        "useful_life_months": 36
+       }
+      ]
+     }
+    ]
+   },
+   "ideal": {
+    "intent": "scenarios",
+    "explanation": "A 90k machine bought in March 2026, depreciated over 36 months.",
+    "assumptions": [],
+    "horizon_months": null,
+    "scenarios": [
+     {
+      "name": "New machine",
+      "overrides": {
+       "revenue_base": null,
+       "revenue_growth": null,
+       "gross_margin": null,
+       "opex_base": null,
+       "opex_growth": null,
+       "other_net": null,
+       "dso_days": null,
+       "dio_days": null,
+       "dpo_days": null,
+       "capex_monthly": null,
+       "depreciation_monthly": null,
+       "useful_life_months": null,
+       "interest_rate": null,
+       "tax_rate": null
+      },
+      "adjustments": [
+       {
+        "line": "capex",
+        "kind": "add",
+        "value": 90000,
+        "start": "2026-03",
+        "end": "2026-03",
+        "label": "Machine",
+        "useful_life_months": 36
+       }
+      ]
      }
     ],
     "unsupported_reason": null

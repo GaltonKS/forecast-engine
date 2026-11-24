@@ -92,7 +92,7 @@ def test_reupload_replaces_not_duplicates(client, tenant):
     hist = client.get(f"/tenants/{tenant}/actuals/monthly", headers=H).json()
     assert hist == [
         {"period": "2024-01-01", "revenue": 250.0, "cogs": 0.0, "opex": 0.0, "other": 0.0,
-         "gross_profit": 250.0, "net_income": 250.0}
+         "interest": 0.0, "tax": 0.0, "gross_profit": 250.0, "net_income": 250.0}
     ]
 
 

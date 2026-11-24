@@ -56,7 +56,7 @@ from .schema import (
     Uncertainty,
 )
 
-ENGINE_VERSION = "0.4.0"
+ENGINE_VERSION = "0.5.0"
 MIN_HISTORY = 3
 RECOMMENDED_HISTORY = 12
 LINES = ("revenue", "opex")
@@ -65,7 +65,9 @@ BALANCE_FORMULAS = {
     "receivables": "receivables[t] = revenue[t] * dso_days / 30.4",
     "inventory": "inventory[t] = cogs[t] * dio_days / 30.4",
     "payables": "payables[t] = (cogs[t] + opex[t] - depreciation_monthly) * dpo_days / 30.4",
-    "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation_monthly",
+    "fixed_assets": "fixed_assets[t] = fixed_assets[t-1] + capex[t] - depreciation[t]",
+    "depreciation": "depreciation[t] = depreciation_monthly + extra capex / useful_life_months, from the month after purchase",
+    "tax_payable": "tax accrues monthly and is paid the month after each quarter end",
     "debt": "debt[t] = debt[t-1] + debt adjustments[t]",
     "equity": "equity[t] = equity[t-1] + net_income[t] + equity adjustments[t]",
     "operating_cash_flow": "net_income + depreciation - change in receivables - change in inventory + change in payables",
@@ -76,7 +78,9 @@ BASE_FORMULAS = {
     "cogs": "cogs[t] = revenue[t] * (1 - gross_margin)",
     "gross_profit": "gross_profit[t] = revenue[t] - cogs[t]",
     "operating_income": "operating_income[t] = gross_profit[t] - opex[t]",
-    "net_income": "net_income[t] = operating_income[t] + other_net",
+    "interest": "interest[t] = debt[t-1] * interest_rate / 12 (recent average if there's no balance sheet)",
+    "tax": "tax[t] = tax_rate * max(0, pretax_income[t] - losses carried forward)",
+    "net_income": "net_income[t] = operating_income[t] + other_net - interest[t] - tax[t]",
 }
 
 
@@ -198,6 +202,8 @@ class Prepared:
     other_sd: float
     opening: st.Opening | None = None
     balance_fitted: dict[str, FittedDriver] = field(default_factory=dict)
+    flat_interest: float = 0.0  # recent average interest, used when there's no balance sheet
+    flat_depreciation: float = 0.0
     _coverage: dict[tuple[str, str], Coverage | None] = field(default_factory=dict)
 
     def indices(self, line: str) -> list[float] | None:
@@ -257,9 +263,12 @@ def prepare(
     opening, bwarn = st.opening_balance(monthly, balances)
     warnings.extend(bwarn)
     balance_fitted = st.fit_balance_drivers(monthly, balances, opening) if opening else {}
+    fitted["tax_rate"] = st.fit_tax_rate(monthly)
+    recent = monthly.tail(3)
     return Prepared(
         monthly, opts, fitted, warnings, seasonality, periods, plans, noise, margin_sd, other_sd,
         opening=opening, balance_fitted=balance_fitted,
+        flat_interest=float(recent["interest"].mean()), flat_depreciation=float(recent["depreciation"].mean()),
     )
 
 
@@ -345,24 +354,47 @@ def build(
             warnings.append(f"Adjustment {name} falls outside the forecast horizon and has no effect")
 
     gm, other_net = drivers.gross_margin, drivers.other_net
+    # Deterministic per scenario: capex, depreciation on extra capex, interest.
+    if prep.opening:
+        fitted_capex = prep.balance_fitted["capex_monthly"].value
+        capex, new_dep = st.capex_and_new_depreciation(drivers, fitted_capex, adjustments, periods)
+        dep_total = drivers.depreciation_monthly + new_dep
+    else:
+        capex, new_dep = np.zeros(h), np.zeros(h)
+        dep_total = np.full(h, prep.flat_depreciation)
+    interest = st.interest_path(prep.opening, drivers, adjustments, periods, prep.flat_interest)
+
+    def finish(rev, cogs_, opex_base, other_):
+        """Income statement below gross profit, for the point forecast or every path."""
+        opex_ = opex_base + new_dep
+        pretax = rev - cogs_ - opex_ + other_ - interest
+        tax = st.tax_schedule(pretax, drivers.tax_rate)
+        return dict(revenue=rev, cogs=cogs_, opex=opex_, other=other_, depreciation=dep_total,
+                    interest=np.broadcast_to(interest, rev.shape), pretax=pretax, tax=tax, net_income=pretax - tax)
+
     revenue = apply_adjustments(paths["revenue"], "revenue", adjustments, periods)
     cogs = apply_adjustments(revenue * (1 - gm), "cogs", adjustments, periods)
-    opex = apply_adjustments(paths["opex"], "opex", adjustments, periods)
+    opex_base = apply_adjustments(paths["opex"], "opex", adjustments, periods)
     other = apply_adjustments(np.full(h, other_net), "other", adjustments, periods)
+    pl = finish(revenue, cogs, opex_base, other)
     months = []
     for i, period in enumerate(periods):
         gp = revenue[i] - cogs[i]
-        oi = gp - opex[i]
+        oi = gp - pl["opex"][i]
         months.append(
             ForecastMonth(
                 period=period.date(),
                 revenue=round(float(revenue[i]), 2),
                 cogs=round(float(cogs[i]), 2),
                 gross_profit=round(float(gp), 2),
-                opex=round(float(opex[i]), 2),
+                opex=round(float(pl["opex"][i]), 2),
                 operating_income=round(float(oi), 2),
                 other_net=round(float(other[i]), 2),
-                net_income=round(float(oi + other[i]), 2),
+                interest=round(float(pl["interest"][i]), 2),
+                pretax_income=round(float(pl["pretax"][i]), 2),
+                tax=round(float(pl["tax"][i]), 2),
+                net_income=round(float(pl["net_income"][i]), 2),
+                depreciation=round(float(dep_total[i]), 2),
             )
         )
     adj_note = " + adjustments" if adjustments else ""
@@ -376,7 +408,7 @@ def build(
 
     opening_row = balance_sheet = cash_flow = cash_summary = None
     if prep.opening:
-        stm = st.project(prep.opening, drivers, revenue, cogs, opex, other, adjustments, periods)
+        stm = st.project(prep.opening, drivers, pl, capex, adjustments, periods)
         opening_row, balance_sheet, cash_flow, cash_summary = st.to_models(prep.opening, stm, periods)
         formulas.update(BALANCE_FORMULAS)
         if any(r.fixed_assets < 0 for r in balance_sheet):
@@ -394,8 +426,9 @@ def build(
         cogs_p = apply_adjustments(rev_p * (1 - gm_p), "cogs", adjustments, periods)
         opex_p = apply_adjustments(opex_p, "opex", adjustments, periods)
         other_p = apply_adjustments(other_net + prep.other_sd * d.other, "other", adjustments, periods)
+        pl_p = finish(rev_p, cogs_p, opex_p, other_p)
+        opex_p, ni_p = pl_p["opex"], pl_p["net_income"]
         gp_p = rev_p - cogs_p
-        ni_p = gp_p - opex_p + other_p
 
         for line, cov in calibration.items():
             if cov.coverage < 0.6:
@@ -407,7 +440,7 @@ def build(
         totals = {"revenue": rev_p.sum(1), "gross_profit": gp_p.sum(1), "opex": opex_p.sum(1), "net_income": ni_p.sum(1)}
         cb, prob_cash_out, runway_band, ending_cash = [None] * h, None, None, None
         if prep.opening:
-            cash_p = st.project(prep.opening, drivers, rev_p, cogs_p, opex_p, other_p, adjustments, periods)["cash"]
+            cash_p = st.project(prep.opening, drivers, pl_p, capex, adjustments, periods)["cash"]
             cb = band(cash_p)
             months_left = st.runway(cash_p, prep.opening.values["cash"])
             prob_cash_out = round(float(np.isfinite(months_left).mean()), 4)

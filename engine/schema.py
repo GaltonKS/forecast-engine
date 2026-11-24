@@ -19,6 +19,8 @@ class Category(str, Enum):
     OPEX = "opex"
     OTHER = "other"  # net other income (+) / expense (-), e.g. interest
     DEPRECIATION = "depreciation"  # counted as opex; tracked as the non-cash part
+    INTEREST = "interest"  # interest expense on debt (positive); below operating income
+    TAX = "tax"  # income tax expense (positive)
     # Balance sheet: amount is the month-end balance
     CASH = "cash"
     RECEIVABLES = "receivables"
@@ -28,12 +30,13 @@ class Category(str, Enum):
     PAYABLES = "payables"
     DEBT = "debt"
     OTHER_LIABILITY = "other_liability"
+    TAX_PAYABLE = "tax_payable"  # income tax owed, not yet paid
     EQUITY = "equity"
 
 
-PL_CATEGORIES = ("revenue", "cogs", "opex", "other", "depreciation")
+PL_CATEGORIES = ("revenue", "cogs", "opex", "other", "depreciation", "interest", "tax")
 ASSET_CATEGORIES = ("cash", "receivables", "inventory", "fixed_assets", "other_assets")
-LIABILITY_CATEGORIES = ("payables", "debt", "other_liability")
+LIABILITY_CATEGORIES = ("payables", "debt", "other_liability", "tax_payable")
 BALANCE_CATEGORIES = ASSET_CATEGORIES + LIABILITY_CATEGORIES + ("equity",)
 
 
@@ -66,6 +69,9 @@ class Drivers(BaseModel):
     dpo_days: float = Field(default=0.0, ge=0, description="Payables in days of cash costs")
     capex_monthly: float = Field(default=0.0, ge=0, description="Monthly capital spending")
     depreciation_monthly: float = Field(default=0.0, ge=0, description="Non-cash part of monthly opex")
+    useful_life_months: float = Field(default=60.0, ge=1, description="Straight-line life of new capex")
+    interest_rate: float = Field(default=0.0, ge=0, description="Annual interest rate on debt")
+    tax_rate: float = Field(default=0.0, ge=0, le=1, description="Income tax rate on profit")
 
 
 class DriverOverrides(BaseModel):
@@ -82,6 +88,9 @@ class DriverOverrides(BaseModel):
     dpo_days: float | None = Field(default=None, ge=0, le=365)
     capex_monthly: float | None = Field(default=None, ge=0)
     depreciation_monthly: float | None = Field(default=None, ge=0)
+    useful_life_months: float | None = Field(default=None, ge=1, le=600)
+    interest_rate: float | None = Field(default=None, ge=0, le=1)
+    tax_rate: float | None = Field(default=None, ge=0, le=1)
 
 
 ForecastMethod = Literal["auto", "driver", "seasonal_naive", "ets", "arima", "prophet"]
@@ -106,6 +115,9 @@ class Adjustment(BaseModel):
     start: date
     end: date | None = None
     label: str | None = Field(default=None, max_length=200)
+    useful_life_months: int | None = Field(
+        default=None, ge=1, le=600, description="capex only: depreciation life; null = the useful_life_months driver"
+    )
 
     @field_validator("start", "end")
     @classmethod
@@ -165,10 +177,14 @@ class ForecastMonth(BaseModel):
     revenue: float
     cogs: float
     gross_profit: float
-    opex: float
+    opex: float  # includes depreciation
     operating_income: float
     other_net: float
+    interest: float = 0.0  # interest expense
+    pretax_income: float | None = None  # operating_income + other_net - interest
+    tax: float = 0.0
     net_income: float
+    depreciation: float = 0.0  # the non-cash part of opex (already included in opex)
 
 
 class FittedDriver(BaseModel):
@@ -243,6 +259,7 @@ class BalanceSheetMonth(BaseModel):
     payables: float
     debt: float
     other_liability: float
+    tax_payable: float = 0.0
     total_liabilities: float
     equity: float
     check: float  # total_assets - total_liabilities - equity; always 0
@@ -255,6 +272,7 @@ class CashFlowMonth(BaseModel):
     change_receivables: float  # cash effect: an increase in receivables is negative
     change_inventory: float
     change_payables: float
+    change_tax_payable: float = 0.0  # tax charged but not yet paid adds to cash
     operating: float
     capex: float  # negative: cash spent
     investing: float

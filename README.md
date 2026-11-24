@@ -206,8 +206,10 @@ Map each account in your chart of accounts to one category, once per customer.
 |---|---|---|
 | `revenue`, `cogs`, `opex`, `other` | income statement | the month's total (`other` is signed: interest income +, expense -) |
 | `depreciation` | income statement | the month's depreciation; counted in opex and added back as non-cash |
+| `interest` | income statement | interest expense on debt (positive); below operating income |
+| `tax` | income statement | income tax expense (positive) |
 | `cash`, `receivables`, `inventory`, `fixed_assets` (net), `other_assets` | balance sheet: assets | month-end balance |
-| `payables`, `debt`, `other_liability` | balance sheet: liabilities | month-end balance |
+| `payables`, `debt`, `other_liability`, `tax_payable` | balance sheet: liabilities | month-end balance |
 | `equity` | balance sheet | month-end balance (checked; see below) |
 
 Income statement and balance rows can be in one file or separate uploads, in
@@ -228,14 +230,28 @@ month's balances:
 | inventory | cogs x `dio_days` / 30.4 |
 | payables | (cogs + opex - depreciation) x `dpo_days` / 30.4 |
 | fixed assets | previous + capex - depreciation |
+| tax payable | previous + tax charged; paid the month after each quarter end (Jan, Apr, Jul, Oct) |
 | debt | previous + borrowed - repaid (from `debt` adjustments) |
 | equity | previous + net income + raised (from `equity` adjustments) |
 | other assets / liabilities | held at the opening balance |
 | cash | previous + operating + investing + financing cash flow |
 
+Below operating income:
+
+| line | how it's projected |
+|---|---|
+| interest | last month's debt x `interest_rate` / 12 (with no balance sheet: the recent average, held flat) |
+| tax | `tax_rate` x pre-tax profit, after losses carried forward; no refunds for loss months |
+| depreciation | `depreciation_monthly` + extra capex / `useful_life_months`, straight-line from the month after purchase |
+
+Extra capex means a `capex` adjustment, or `capex_monthly` set above its fitted
+value. Regular capex at the fitted level isn't depreciated again, because its
+depreciation is already in the historical opex trend. A `capex` adjustment can
+carry its own `useful_life_months` (e.g. a van over 36 months).
+
 Cash flow is the indirect method: net income + depreciation - increases in
-receivables and inventory + increases in payables, minus capex, plus
-financing. Cash is the one line no driver sets, so the balance sheet balances
+receivables and inventory + increases in payables and tax payable, minus
+capex, plus financing. Cash is the one line no driver sets, so the balance sheet balances
 every month (`check` is always 0).
 
 | driver | default fit |
@@ -245,8 +261,11 @@ every month (`check` is always 0).
 | `dpo_days` | payables / monthly cash costs x 30.4 |
 | `depreciation_monthly` | average of the last 3 months of `depreciation` rows |
 | `capex_monthly` | change in fixed assets + depreciation, last 3 consecutive months; equal to depreciation if there's no history |
+| `useful_life_months` | 60 (5 years), for capex above the baseline |
+| `interest_rate` | annualised interest / the previous month's debt, last 3 months |
+| `tax_rate` | tax / pre-tax profit over the last 12 months (effective rate); 0 without `tax` rows. Works without a balance sheet |
 
-All five can be overridden in a scenario. `capex`, `debt` and `equity` are
+All of them can be overridden in a scenario. `capex`, `debt` and `equity` are
 also adjustment lines (kind `add`), e.g. a one-off equipment purchase, a loan
 drawn in March and repaid monthly, or a funding round in June.
 
@@ -257,10 +276,10 @@ simulations, `uncertainty` adds cash P10/P50/P90 per month, `prob_cash_out`
 `p10` is the pessimistic end; null means beyond the horizon). Scenario deltas
 include ending cash.
 
-**Not modelled yet:** income tax; interest calculated from the debt balance
-(interest stays in `other` at its historical level, so a new loan's interest
-must be added as an `other` adjustment); depreciation on new capex; payment
-terms that differ by customer or season.
+**Not modelled yet:** interest earned on cash; tax losses from before the
+forecast (only losses inside the forecast are carried forward); payment terms
+that differ by customer or season; different rates for different loans
+(`interest_rate` applies to all debt).
 
 ## Driver fitting
 

@@ -31,6 +31,9 @@ class LLMOverrides(BaseModel):
     dpo_days: float | None = Field(description="Days taken to pay suppliers")
     capex_monthly: float | None = Field(description="Regular monthly capital spending")
     depreciation_monthly: float | None = Field(description="Monthly depreciation")
+    useful_life_months: float | None = Field(description="Default life of new equipment, in months")
+    interest_rate: float | None = Field(description="ANNUAL interest rate on all debt, 0.08 = 8%")
+    tax_rate: float | None = Field(description="Income tax rate on profit, 0.25 = 25%")
 
 
 class LLMAdjustment(BaseModel):
@@ -41,6 +44,7 @@ class LLMAdjustment(BaseModel):
     start: Month
     end: Month | None = Field(description="Last month it applies, inclusive; null = to the end")
     label: str = Field(max_length=120)
+    useful_life_months: int | None = Field(description="capex only: how long the purchase lasts, in months; else null")
 
 
 class LLMScenario(BaseModel):

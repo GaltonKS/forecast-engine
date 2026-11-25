@@ -79,3 +79,31 @@ warnings, a code-written summary and the full comparison.
 - **No migrations.** Tables are created with `create_all`, which adds new
   tables (step 4's `jobs`) but never changes existing ones. The next change to
   an existing column needs Alembic.
+
+## Data retention
+
+| What | How long | Why |
+|---|---|---|
+| Raw uploads, before name-stripping | Deleted on successful parse; 7 days if parse fails | Shortest possible window on client PII |
+| Client roster used to scrub free text | Destroyed at end of the parse run | Already the design |
+| De-identified snapshot + declared inputs | Engagement + 30 days | Product needs it; 30 days to request an export |
+| Prompts and figures sent to the model | Not retained by us | Nothing accumulates |
+| Access / audit log | 24 months | Outlives Xero's twice-yearly audit cycle |
+
+**Where the code stands against this (not yet enforced):**
+
+- **Raw uploads:** the API never writes the uploaded file anywhere. It parses
+  the CSV in memory and stores only the line items (period, account name,
+  category, amount), whether or not parsing succeeds. There is no
+  name-stripping step yet, so account names are stored as uploaded.
+- **Client roster / free-text scrubbing:** not built yet.
+- **Snapshot and inputs:** actuals, saved forecasts and jobs are kept with no
+  end date. Meeting "engagement + 30 days" needs an engagement end date per
+  tenant, a scheduled purge, and an export endpoint.
+- **Prompts sent to the model:** this conflicts with the code today. `/query`
+  stores the prompt in `jobs.request` and `forecasts.prompt`, and the model's
+  interpretation in `jobs.result`. Meeting "not retained" means dropping or
+  redacting those, and confirming that the model host (vLLM on Modal or
+  RunPod) keeps no request logs.
+- **Access / audit log:** none exists yet. API calls aren't recorded per
+  user or tenant beyond the platform's own request logs.

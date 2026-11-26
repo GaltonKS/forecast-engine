@@ -1,11 +1,16 @@
+# Every resource is in Ohio: close to the Pilot apps on Fly (Chicago, "ord"),
+# and on one private network. Render can't move a resource to another region
+# after it's created, so change this only before the first Blueprint sync.
 databases:
   - name: forecast-db
     plan: basic-256mb
+    region: ohio
 
 services:
   - type: web
     name: forecast-api
     runtime: python
+    region: ohio
     plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -40,6 +45,7 @@ services:
   - type: worker
     name: forecast-worker
     runtime: python
+    region: ohio
     buildCommand: pip install -r requirements.txt
     startCommand: celery -A app.worker worker --concurrency 1 --loglevel INFO
     envVars:
@@ -68,5 +74,6 @@ services:
   # does not, so queued jobs would be lost on restart.
   - type: keyvalue
     name: forecast-queue
+    region: ohio
     ipAllowList: [] # private network only
     maxmemoryPolicy: noeviction

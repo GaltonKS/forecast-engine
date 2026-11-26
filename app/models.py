@@ -106,3 +106,27 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class ApiKey(Base):
+    """An API key, stored as a SHA-256 hash (keys are long random strings, so a
+    fast hash is enough). The plaintext is shown once, when it's created.
+
+    service: may act on any tenant and create tenants (e.g. the shared Pilot app).
+    tenant:  may act on its one tenant only (e.g. one company's Pilot app).
+    The API_KEY environment variable is the admin key: everything, plus
+    creating and revoking these keys.
+    """
+
+    __tablename__ = "api_keys"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(16))  # service | tenant
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True, default=None
+    )
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(16))  # first characters, to recognise a key in lists
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

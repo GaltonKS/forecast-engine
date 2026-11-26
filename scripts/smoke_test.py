@@ -8,14 +8,16 @@ pipeline is the likely cause:
   1. health            API is up (Render web service)
   2. auth              API key is enforced
   3. tenant + upload   Postgres reads and writes; sample income statement + balances
+     tenant keys       a tenant key reaches its tenant only (needs the admin key; SKIP otherwise)
   4. forecast          engine runs in the API (three statements balance)
   5. forecast job      Valkey + worker pick up and finish a job
   6. scenario job      scenarios and paired deltas through the worker
   7. query             model endpoint reachable and returns usable scenarios
                        (SKIP if the server has no LLM configured)
 
-Creates one tenant named "smoke-test <timestamp>" each run. There is no
-delete endpoint yet, so test tenants stay in the database.
+Creates tenants named "smoke-test <timestamp>" each run (two when it checks
+tenant keys). There is no delete endpoint yet, so test tenants stay in the
+database. The test tenant key it makes is revoked before it finishes.
 """
 from __future__ import annotations
 
@@ -93,6 +95,28 @@ class Smoke:
             raise Failed(f"balance sheet not ready after upload: {s}")
         return f"tenant {self.tenant}, {s['months_in_history']} months, balances to {s['balances_end']}"
 
+    def tenant_keys(self):
+        r = self.c.post("/admin/keys", headers=self.h, json={"name": "smoke test", "kind": "tenant", "tenant_id": self.tenant})
+        if r.status_code == 403:
+            return "SKIP: --key isn't the admin key (API_KEY), so it can't create keys"
+        if r.status_code != 201:
+            raise Failed(f"POST /admin/keys -> {r.status_code}: {r.text[:300]}")
+        k = r.json()
+        kh = {"Authorization": f"Bearer {k['key']}"}
+        try:
+            other = self.call("POST", "/tenants", expect=(201,), json={"name": f"smoke-test other {time.strftime('%H:%M:%S')}"})["id"]
+            own = self.c.get(f"/tenants/{self.tenant}", headers=kh).status_code
+            theirs = self.c.get(f"/tenants/{other}", headers=kh).status_code
+            create = self.c.post("/tenants", headers=kh, json={"name": "should fail"}).status_code
+            if (own, theirs, create) != (200, 404, 403):
+                raise Failed(f"tenant key: own tenant {own} (want 200), other tenant {theirs} (want 404), "
+                             f"create tenant {create} (want 403)", "Tenant isolation is broken: don't put client data in.")
+        finally:
+            self.c.delete(f"/admin/keys/{k['id']}", headers=self.h)
+        if self.c.get(f"/tenants/{self.tenant}", headers=kh).status_code != 401:
+            raise Failed("a revoked key still works")
+        return "own tenant 200, other tenant 404, can't create tenants, revoked key rejected"
+
     def forecast(self):
         f = self.call("POST", f"/tenants/{self.tenant}/forecasts", expect=(201,),
                       json={"horizon_months": 12, "simulations": 200})
@@ -163,7 +187,8 @@ def main() -> int:
 
     s = Smoke(args.url, args.key, args.job_timeout, args.query_timeout)
     checks = [
-        ("health", s.health), ("auth", s.auth), ("tenant + upload", s.upload), ("forecast", s.forecast),
+        ("health", s.health), ("auth", s.auth), ("tenant + upload", s.upload), ("tenant keys", s.tenant_keys),
+        ("forecast", s.forecast),
         ("forecast job", s.forecast_job), ("scenario job", s.scenario_job),
     ]
     if not args.skip_query:

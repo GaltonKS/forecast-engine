@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import io
 import logging
-import secrets
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -28,11 +27,12 @@ from engine.ingest import IngestError
 from engine.schema import LineItem, ScenarioRequest
 from llm.schema import QueryRequest
 
+from .auth import Principal, authenticate, hash_key, new_key
 from .config import Settings
 from . import jobs as jobs_mod
 from .jobs import NoData, execute_job, expire_stale_jobs, save_forecast
 from .jobs import load_financials as _load_financials
-from .models import Account, Actual, Base, Forecast, Job, Tenant
+from .models import Account, Actual, ApiKey, Base, Forecast, Job, Tenant
 
 log = logging.getLogger("forecast_api")
 
@@ -109,6 +109,32 @@ class ForecastSummary(BaseModel):
     prompt: str | None = None  # set when the forecast came from /query
 
 
+class KeyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100, description="Who uses it, e.g. 'Pilot: Acme on Fly'")
+    kind: Literal["service", "tenant"]
+    tenant_id: uuid.UUID | None = Field(default=None, description="Required for kind 'tenant'; must be empty for 'service'")
+
+
+class KeyOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    kind: str
+    tenant_id: uuid.UUID | None
+    prefix: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class NewKeyOut(KeyOut):
+    key: str = Field(description="The key itself. Shown only now; store it somewhere safe.")
+
+
+def _key_out(k: "ApiKey") -> dict:
+    return dict(id=k.id, name=k.name, kind=k.kind, tenant_id=k.tenant_id, prefix=k.prefix,
+                created_at=k.created_at, last_used_at=k.last_used_at, revoked_at=k.revoked_at)
+
+
 class JobSummary(BaseModel):
     id: uuid.UUID
     kind: Literal["forecast", "scenarios", "query"]
@@ -164,21 +190,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with SessionLocal() as session:
             yield session
 
-    def require_api_key(request: Request) -> None:
-        if not settings.api_key:
-            return
-        supplied = request.headers.get("x-api-key") or ""
-        auth = request.headers.get("authorization", "")
-        if auth.lower().startswith("bearer "):
-            supplied = auth[7:]
-        if not secrets.compare_digest(supplied.encode(), settings.api_key.encode()):
-            raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    def require_api_key(request: Request, db: Session = Depends(get_db)) -> Principal:
+        return authenticate(request, db, settings.api_key)
 
-    def get_tenant(tenant_id: uuid.UUID, db: Session = Depends(get_db)) -> Tenant:
-        tenant = db.get(Tenant, tenant_id)
+    def get_tenant(
+        tenant_id: uuid.UUID,
+        who: Principal = Depends(require_api_key),
+        db: Session = Depends(get_db),
+    ) -> Tenant:
+        # A tenant key asking for another tenant gets the same answer as for a
+        # tenant that doesn't exist, so it can't learn which tenants exist.
+        tenant = db.get(Tenant, tenant_id) if who.may_access(tenant_id) else None
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         return tenant
+
+    def require_admin(who: Principal = Depends(require_api_key)) -> Principal:
+        if not who.can_manage_keys:
+            raise HTTPException(status_code=403, detail="Only the admin key can manage API keys")
+        return who
 
     def load_financials(db: Session, tenant_id: uuid.UUID):
         try:
@@ -223,8 +253,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health():
         return {"status": "ok", "engine_version": ENGINE_VERSION}
 
-    @app.post("/tenants", response_model=TenantOut, status_code=201, dependencies=auth)
-    def create_tenant(body: TenantIn, db: Session = Depends(get_db)):
+    # ----- API keys (admin key only) -----
+
+    @app.post("/admin/keys", response_model=NewKeyOut, status_code=201, dependencies=[Depends(require_admin)])
+    def create_key(body: KeyIn, db: Session = Depends(get_db)):
+        """Create a key. A 'tenant' key reaches one tenant only; a 'service' key
+        reaches every tenant and can create tenants. The key is returned once."""
+        if body.kind == "tenant":
+            if body.tenant_id is None or db.get(Tenant, body.tenant_id) is None:
+                raise HTTPException(status_code=422, detail="A tenant key needs the id of an existing tenant")
+        elif body.tenant_id is not None:
+            raise HTTPException(status_code=422, detail="A service key isn't tied to a tenant; leave tenant_id empty")
+        key = new_key(body.kind)
+        row = ApiKey(name=body.name, kind=body.kind, tenant_id=body.tenant_id, key_hash=hash_key(key), prefix=key[:12])
+        db.add(row)
+        db.commit()
+        return NewKeyOut(**_key_out(row), key=key)
+
+    @app.get("/admin/keys", response_model=list[KeyOut], dependencies=[Depends(require_admin)])
+    def list_keys(tenant_id: uuid.UUID | None = None, include_revoked: bool = False, db: Session = Depends(get_db)):
+        q = select(ApiKey)
+        if tenant_id:
+            q = q.where(ApiKey.tenant_id == tenant_id)
+        if not include_revoked:
+            q = q.where(ApiKey.revoked_at.is_(None))
+        return [KeyOut(**_key_out(k)) for k in db.scalars(q.order_by(ApiKey.created_at))]
+
+    @app.delete("/admin/keys/{key_id}", response_model=KeyOut, dependencies=[Depends(require_admin)])
+    def revoke_key(key_id: uuid.UUID, db: Session = Depends(get_db)):
+        """Revoke a key. It stops working immediately. Revoking twice is harmless."""
+        from .models import utcnow
+
+        row = db.get(ApiKey, key_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Key not found")
+        if row.revoked_at is None:
+            row.revoked_at = utcnow()
+            db.commit()
+        return KeyOut(**_key_out(row))
+
+    @app.post("/tenants", response_model=TenantOut, status_code=201)
+    def create_tenant(body: TenantIn, who: Principal = Depends(require_api_key), db: Session = Depends(get_db)):
+        if not who.can_create_tenants:
+            raise HTTPException(status_code=403, detail="Tenant keys can't create tenants")
         tenant = Tenant(name=body.name)
         db.add(tenant)
         db.commit()

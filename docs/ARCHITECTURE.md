@@ -169,9 +169,11 @@ branding, logo, engine tenant id), `hostnames` (subdomain per company),
 `ui_state` (saved ideas, chat, corrected numbers, per user), `usage_events`,
 `audit_log` (staff access).
 
-Engine changes: a service key for the Pilot app that must name a tenant on
-every call (the current single `API_KEY` gives access to all tenants and
-should be retired), and per-tenant keys for anything else that calls it.
+Engine keys (**built**): the shared Pilot app gets a `service` key, and every
+route already names its tenant in the path. Each company's Pilot app on Fly,
+during the transition, gets a `tenant` key that reaches only that company.
+The `API_KEY` environment variable stays as the admin key, used only to
+create and revoke keys. See API keys in the README.
 
 ### Sign-in
 

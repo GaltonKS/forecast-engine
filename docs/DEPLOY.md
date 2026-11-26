@@ -30,7 +30,9 @@ You'll need accounts on Render and Modal, and this repo on GitHub.
    - `forecast-api`: `Application startup complete`
    - `forecast-worker`: `celery@... ready`. If it stops at startup with an
      import error, the logs show it; jobs won't run until it's fixed.
-4. Copy `API_KEY` from `forecast-api` → **Environment**.
+4. Copy `API_KEY` from `forecast-api` → **Environment**. This is the **admin
+   key**: keep it to yourselves, for managing keys and running the smoke test.
+   Apps get their own narrower keys (step 3).
 
 **Check**: from a machine with this repo and `pip install -r requirements.txt`:
 
@@ -108,8 +110,19 @@ take longer).
 
 ## 3. The frontend
 
-- **Call the API from your frontend's backend, never from the browser.** The
-  API key gives full access to every tenant.
+- **Call the API from your frontend's backend, never from the browser.**
+- **Give each app its own key, never the admin key.** For one company's Pilot
+  app on Fly: create the company's tenant, then a tenant key for it, and store
+  it as a Fly secret on that app:
+
+  ```bash
+  curl -X POST "$API/admin/keys" -H "Authorization: Bearer $API_KEY" \
+       -H 'content-type: application/json' \
+       -d '{"name": "Pilot: Acme on Fly", "kind": "tenant", "tenant_id": "<acme tenant id>"}'
+  ```
+
+  The response holds the key once. A shared app serving many companies gets
+  one `service` key instead. Revoke with `DELETE /admin/keys/{id}`.
 - Flow: `POST /tenants` once per customer, `POST /tenants/{id}/actuals/upload`
   for their CSV(s), then either `POST /tenants/{id}/forecasts` (waits) or the
   job endpoints (`/forecast-jobs`, `/scenario-jobs`, `/query`) and poll

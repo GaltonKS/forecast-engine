@@ -85,7 +85,7 @@ TEST_DATABASE_URL=postgresql://user@localhost/forecast_test pytest -q tests/test
 | env var        | purpose                                                    |
 |----------------|------------------------------------------------------------|
 | `DATABASE_URL` | Postgres connection (set by Render); SQLite if unset       |
-| `API_KEY`      | required on every call except `/health`; API is open if unset |
+| `API_KEY`      | the admin key (see API keys below); the API is open if unset |
 | `CORS_ORIGINS` | comma-separated origins allowed to call from a browser     |
 | `REDIS_URL`    | Valkey connection for the job queue (set by Render); jobs run in-process if unset |
 | `LLM_BASE_URL` | model endpoint for `/query`, ending in `/v1`; `/query` returns 503 if unset |
@@ -98,7 +98,31 @@ TEST_DATABASE_URL=postgresql://user@localhost/forecast_test pytest -q tests/test
 
 ## API
 
-Send the key as `Authorization: Bearer <API_KEY>` or `X-API-Key: <API_KEY>`.
+Send a key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+### API keys
+
+| key | where it comes from | can do |
+|---|---|---|
+| admin | the `API_KEY` environment variable | everything, including creating and revoking keys |
+| service (`fek_svc_...`) | `POST /admin/keys` | every tenant, and creating tenants; not key management |
+| tenant (`fek_ten_...`) | `POST /admin/keys` with a `tenant_id` | that one tenant only |
+
+Give each caller the narrowest key that works: a tenant key for one company's
+Pilot app, a service key for an app that serves many companies. Keep the admin
+key for managing keys and running the smoke test. A tenant key asking for any
+other tenant gets `404 Tenant not found`, the same as for a tenant that doesn't
+exist, so it can't learn which tenants exist.
+
+| method | path | what it does (admin key only) |
+|---|---|---|
+| POST | `/admin/keys` | create `{"name": "Pilot: Acme on Fly", "kind": "tenant", "tenant_id": "..."}`; the key is in the response, **shown once** |
+| GET | `/admin/keys` | list keys (`?tenant_id=`, `?include_revoked=true`); never shows the keys themselves |
+| DELETE | `/admin/keys/{id}` | revoke; stops working immediately |
+
+Keys are stored as SHA-256 hashes. Each shows its first 12 characters
+(`prefix`) and when it was last used, so an unused or leaked key can be found
+and revoked.
 
 | method | path                                         | what it does                          |
 |--------|----------------------------------------------|---------------------------------------|
@@ -398,8 +422,10 @@ simulation noise. A fixed $30k/month hire shows as exactly -$30k/month.
 
 ## Security notes
 
-- The single `API_KEY` is meant for server-to-server calls. If your frontend
-  calls this API straight from the browser, the key is visible to users. Put
-  your frontend's backend in between, or replace this with your app's user auth
-  (for example verifying its JWTs) before real customer data goes in.
-- Every query is scoped by tenant. A forecast from one tenant returns 404 under another.
+- Keys are for server-to-server calls. If a frontend calls this API straight
+  from the browser, its key is visible to users. Call it from the frontend's
+  own backend.
+- Every query is scoped by tenant. A forecast from one tenant returns 404 under
+  another, and a tenant key can't reach any tenant but its own.
+- Don't hand out the admin key. Give each app a tenant or service key, so one
+  leaked key exposes one company, and can be revoked without touching the rest.

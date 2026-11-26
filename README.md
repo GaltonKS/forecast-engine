@@ -13,6 +13,8 @@ turns the prompt into scenario JSON, and the engine does the math.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the target architecture,
 build order, and what's still missing.
+[docs/DEPLOY.md](docs/DEPLOY.md) walks through deploying the whole pipeline
+(Render, the model on Modal, the frontend) with a check after each step.
 
 ```
 engine/            the math (step 1)
@@ -89,7 +91,7 @@ TEST_DATABASE_URL=postgresql://user@localhost/forecast_test pytest -q tests/test
 | `LLM_BASE_URL` | model endpoint for `/query`, ending in `/v1`; `/query` returns 503 if unset |
 | `LLM_MODEL`    | model name the endpoint serves                             |
 | `LLM_API_KEY`  | sent as a Bearer token, if the endpoint needs one          |
-| `LLM_GUIDED`   | `json_schema` (default), `guided_json` (older vLLM) or `none` |
+| `LLM_GUIDED`   | `json_schema` (default; current vLLM), `guided_json` (vLLM before 0.12 only) or `none` |
 | `LLM_TIMEOUT_SECONDS` | wait for the model (default 180, for GPU cold starts) |
 | `JOB_TIMEOUT_MINUTES` | a job still queued or running after this long is marked failed (default 10) |
 | `MAX_UPLOAD_MB`| upload size limit (default 10)                             |

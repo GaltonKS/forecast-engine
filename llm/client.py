@@ -2,9 +2,14 @@
 
 Only /chat/completions is used. Structured output is requested one of three
 ways (LLM_GUIDED), because servers differ:
-  json_schema  OpenAI-style response_format (vLLM >= 0.6, most hosted APIs)
-  guided_json  vLLM's older extra parameter
+  json_schema  OpenAI-style response_format (current vLLM, most hosted APIs)
+  guided_json  vLLM's old extra parameter; removed in vLLM 0.12, only for old servers
   none         no constraint; the reply is parsed and validated anyway
+
+A GPU endpoint that scales to zero answers 503 (or can't be reached) while a
+container starts, which can take minutes. Those responses are retried with
+backoff until LLM_TIMEOUT_SECONDS is used up, so the first query after an
+idle period waits for the cold start instead of failing.
 """
 from __future__ import annotations
 
@@ -59,6 +64,45 @@ class LLMConfig:
         return bool(self.base_url and self.model)
 
 
+RETRY_STATUSES = {429, 502, 503, 504}
+MAX_RETRY_WAIT = 15.0
+
+
+def _sleep(seconds: float) -> None:  # patched in tests
+    time.sleep(seconds)
+
+
+def _now() -> float:  # patched in tests
+    return time.monotonic()
+
+
+def _post_with_retry(client: httpx.Client, url: str, body: dict, headers: dict, cfg: "LLMConfig") -> httpx.Response:
+    """POST, retrying cold-start answers (429/502/503/504, can't connect) with
+    backoff until cfg.timeout_seconds is used up."""
+    deadline = _now() + cfg.timeout_seconds
+    wait = 2.0
+    while True:
+        remaining = max(deadline - _now(), 0.001)
+        try:
+            r = client.post(url, json=body, headers=headers, timeout=remaining)
+        except httpx.TimeoutException:
+            raise LLMUnavailable(f"Model endpoint timed out after {cfg.timeout_seconds:g}s")
+        except httpx.HTTPError as e:
+            problem = f"unreachable ({e.__class__.__name__})"
+        else:
+            if r.status_code not in RETRY_STATUSES:
+                return r
+            problem = f"returned {r.status_code}"
+        pause = min(wait, deadline - _now())
+        if pause <= 0:
+            raise LLMUnavailable(
+                f"Model endpoint {problem}; still unavailable after {cfg.timeout_seconds:g}s "
+                "(a cold GPU can take minutes: raise LLM_TIMEOUT_SECONDS if this persists)"
+            )
+        _sleep(pause)
+        wait = min(wait * 2, MAX_RETRY_WAIT)
+
+
 @dataclass
 class ChatResult:
     content: str
@@ -92,15 +136,10 @@ def chat_json(cfg: LLMConfig, messages: list[dict], schema: dict, schema_name: s
     headers = {"Authorization": f"Bearer {cfg.api_key}"} if cfg.api_key else {}
     url = cfg.base_url.rstrip("/") + "/chat/completions"
 
-    started = time.monotonic()
-    try:
-        with httpx.Client(timeout=cfg.timeout_seconds, transport=cfg.transport) as client:
-            r = client.post(url, json=body, headers=headers)
-    except httpx.TimeoutException:
-        raise LLMUnavailable(f"Model endpoint timed out after {cfg.timeout_seconds:g}s")
-    except httpx.HTTPError as e:
-        raise LLMUnavailable(f"Model endpoint unreachable ({e.__class__.__name__})")
-    latency = time.monotonic() - started
+    started = _now()
+    with httpx.Client(transport=cfg.transport) as client:
+        r = _post_with_retry(client, url, body, headers, cfg)
+    latency = _now() - started
 
     if r.status_code >= 500 or r.status_code == 429:
         raise LLMUnavailable(f"Model endpoint returned {r.status_code}")

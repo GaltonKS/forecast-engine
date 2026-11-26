@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from engine import load_csv, to_monthly  # noqa: E402
 from llm.client import LLMBadOutput, LLMConfig, LLMNotConfigured, LLMUnavailable, chat_json  # noqa: E402
-from llm.evals import SAMPLE, check, fake_transport, load_cases, run_case, sample_data  # noqa: E402
+from llm.evals import SAMPLE, check, fake_transport, load_cases, run_case, sample_accounts, sample_data  # noqa: E402
 from llm.interpret import interpret  # noqa: E402
 from llm.prompt import build_context, messages, render_context  # noqa: E402
 from llm.schema import Interpretation, LLMOutput  # noqa: E402
@@ -24,8 +24,10 @@ from llm.summary import fmt  # noqa: E402
 
 MONTHLY = to_monthly(load_csv(SAMPLE))
 MONTHLY_B, BALANCES = sample_data()
+ACCOUNTS = sample_accounts()
 CASES = {c["id"]: c for c in load_cases()}
-EMPTY_OV = dict(revenue_base=None, revenue_growth=None, gross_margin=None, opex_base=None, opex_growth=None, other_net=None,
+EMPTY_OV = dict(revenue_base=None, revenue_growth=None, revenue_growth_annual=None, gross_margin=None, opex_base=None,
+                opex_growth=None, opex_growth_annual=None, other_net=None,
                 dso_days=None, dio_days=None, dpo_days=None, capex_monthly=None, depreciation_monthly=None,
                 useful_life_months=None, interest_rate=None, tax_rate=None)
 
@@ -80,8 +82,9 @@ def scenario(name="S", adjustments=(), **overrides):
     return dict(name=name, overrides={**EMPTY_OV, **overrides}, adjustments=list(adjustments))
 
 
-def adj(line="opex", kind="add", value=1000, start="2026-03", end=None, label="a", life=None):
-    return dict(line=line, kind=kind, value=value, start=start, end=end, label=label, useful_life_months=life)
+def adj(line="opex", kind="add", value=1000, start="2026-03", end=None, label="a", life=None, timing="monthly"):
+    return dict(line=line, kind=kind, timing=timing, value=value, start=start, end=end, label=label,
+                useful_life_months=life)
 
 
 # ---------- the request we send ----------
@@ -132,7 +135,7 @@ def test_context_tells_the_model_dates_and_current_drivers():
     assert "First forecast month: 2026-01 (January 2026)" in text
     assert "revenue_growth = 0.0328 per month" in text
     system = messages(ctx, "hi")[0]["content"]
-    assert "MONTHLY" in system and "COMPANY CONTEXT" in system
+    assert "Never divide it" in system and "never convert them yourself" in system and "COMPANY CONTEXT" in system
 
 
 # ---------- parsing and checks ----------
@@ -185,7 +188,7 @@ def test_warnings_for_suspicious_values():
 
 
 def test_duplicate_scenario_names_are_made_unique():
-    t, _ = scripted(reply(output(scenarios=[scenario("Plan"), scenario("plan")])))
+    t, _ = scripted(reply(output(scenarios=[scenario("Plan", adjustments=[adj()]), scenario("plan", adjustments=[adj()])])))
     interp, _, _ = interpret("anything", MONTHLY, cfg(t))
     assert [s.name for s in interp.scenarios] == ["Plan", "plan (2)"]
 
@@ -252,7 +255,7 @@ def test_timeout_and_unreachable():
 def test_ideal_replies_pass_every_eval_case():
     c = cfg(fake_transport())
     failed = {cid: r["failures"] for cid, case in CASES.items()
-              if not (r := run_case(case, MONTHLY_B, c, BALANCES))["passed"]}
+              if not (r := run_case(case, MONTHLY_B, c, BALANCES, ACCOUNTS))["passed"]}
     assert failed == {}
 
 
@@ -304,3 +307,64 @@ def test_percentage_typed_interest_rate_is_flagged():
 def test_context_shows_tax_and_interest_rates():
     text = render_context(build_context(MONTHLY_B, BALANCES))
     assert "tax_rate       = 0.0000 on profit" in text and "interest_rate = 0.0000 per year on debt" in text
+
+
+
+# ---------- fixes from the first real-model eval ----------
+
+def test_annual_growth_is_converted_by_code_with_compounding():
+    t, _ = scripted(reply(output(scenarios=[scenario("24%/yr", revenue_growth_annual=0.24, opex_growth_annual=0.05)])))
+    interp, warnings, _ = interpret("x", MONTHLY, cfg(t))
+    ov = interp.scenarios[0].overrides
+    assert ov.revenue_growth == pytest.approx(1.24 ** (1 / 12) - 1)  # 0.0181, not 0.24 / 12 = 0.02
+    assert ov.opex_growth == pytest.approx(1.05 ** (1 / 12) - 1)
+    assert not any("unusually high" in w for w in warnings)
+
+
+def test_growth_given_both_ways_is_retried():
+    good = json.dumps(CASES["margin"]["ideal"])
+    t, seen = scripted(reply(output(scenarios=[scenario("x", revenue_growth=0.02, revenue_growth_annual=0.24)])), reply(good))
+    interpret("x", MONTHLY, cfg(t))
+    assert "not both" in seen[1]["body"]["messages"][-1]["content"]
+
+
+def test_once_means_one_month_whatever_end_says():
+    out = output(scenarios=[scenario("Loan", adjustments=[
+        adj(line="debt", value=200000, start="2026-03", end=None, timing="once", label="Loan"),
+        adj(line="equity", value=50000, start="2026-04", end="2026-12", timing="once", label="Round"),
+        adj(line="debt", value=-10000, start="2026-04", end=None, timing="monthly", label="Repay"),
+    ])])
+    t, _ = scripted(reply(out))
+    interp, warnings, _ = interpret("x", MONTHLY_B, cfg(t), balances=BALANCES)
+    a = {x.label: (str(x.start), str(x.end) if x.end else None) for x in interp.scenarios[0].adjustments}
+    assert a == {"Loan": ("2026-03-01", "2026-03-01"), "Round": ("2026-04-01", "2026-04-01"), "Repay": ("2026-04-01", None)}
+    assert not any("EVERY month" in w for w in warnings)
+
+
+def test_open_ended_monthly_borrowing_is_flagged():
+    out = output(scenarios=[scenario("Loan", adjustments=[adj(line="debt", value=200000, timing="monthly", label="Loan")])])
+    t, _ = scripted(reply(out))
+    _, warnings, _ = interpret("x", MONTHLY_B, cfg(t), balances=BALANCES)
+    assert any("'Loan' adds 200,000 of debt EVERY month" in w for w in warnings)
+
+
+def test_scenarios_that_change_nothing_become_baseline():
+    t, _ = scripted(reply(output(scenarios=[scenario("Next two years")], horizon_months=24)))
+    interp, _, _ = interpret("x", MONTHLY, cfg(t))
+    assert interp.intent == "baseline" and interp.scenarios == [] and interp.horizon_months == 24
+    # mixed: the empty one is dropped (the baseline is always in the result)
+    t, _ = scripted(reply(output(scenarios=[scenario("As is"), scenario("Hire", adjustments=[adj()])])))
+    interp, _, _ = interpret("x", MONTHLY, cfg(t))
+    assert interp.intent == "scenarios" and [s.name for s in interp.scenarios] == ["Hire"]
+
+
+def test_context_lists_the_companys_accounts_by_line():
+    text = render_context(build_context(MONTHLY_B, BALANCES, ACCOUNTS))
+    assert "cogs: Hosting, Payment processing" in text
+    assert "opex: Marketing, Rent, Salaries" in text
+    assert "Bank accounts" not in text  # balance sheet accounts aren't income statement lines
+
+
+def test_context_says_whether_cash_questions_are_supported():
+    assert "Cash and runway questions: SUPPORTED" in render_context(build_context(MONTHLY_B, BALANCES))
+    assert "Cash and runway questions: UNSUPPORTED" in render_context(build_context(MONTHLY))

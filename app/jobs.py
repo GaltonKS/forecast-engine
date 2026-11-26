@@ -151,7 +151,10 @@ def execute_job(session_factory: sessionmaker, job_id: uuid.UUID) -> None:
 
 def run_query(db: Session, tenant_id: uuid.UUID, monthly, balances, req: QueryRequest) -> dict:
     """Prompt -> scenarios (model) -> forecasts (engine) -> summary (code)."""
-    interp, warnings, call = interpret(req.prompt, monthly, llm_config(), req.horizon_months, balances)
+    accounts: dict[str, list[str]] = {}
+    for name, category in db.execute(select(Account.name, Account.category).where(Account.tenant_id == tenant_id)):
+        accounts.setdefault(category, []).append(name)
+    interp, warnings, call = interpret(req.prompt, monthly, llm_config(), req.horizon_months, balances, accounts)
     result = QueryResult(prompt=req.prompt, interpretation=interp, warnings=warnings, llm=call)
     if not req.run or interp.intent == "unsupported":
         return result.model_dump(mode="json")

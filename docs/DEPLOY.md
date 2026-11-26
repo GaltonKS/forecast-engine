@@ -18,6 +18,11 @@ You'll need accounts on Render and Modal, and this repo on GitHub.
    - `forecast-worker`: background worker (default 0.5 CPU / 512 MB). **Paid; no free plan.**
    - `forecast-queue`: Valkey, `noeviction`, private network only. **Paid**, because the free plan doesn't persist queued jobs.
    - `forecast-db`: Postgres
+
+   Everything is created in **Ohio**, next to the Pilot apps on Fly (Chicago).
+   Render can't move a resource between regions later. If you already created
+   any of these in another region, delete them and let the Blueprint create
+   them again (nothing is lost if no real data is in them yet).
 2. When prompted:
    - `CORS_ORIGINS`: your frontend's URL(s), comma-separated.
    - `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`: **leave empty for now** (step 2).

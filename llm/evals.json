@@ -46,12 +46,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "opex",
         "kind": "add",
+        "timing": "monthly",
         "value": 20000,
         "start": "2026-03",
         "end": null,
@@ -107,12 +110,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "revenue",
         "kind": "pct",
+        "timing": "monthly",
         "value": 0.05,
         "start": "2026-04",
         "end": null,
@@ -164,7 +170,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -211,7 +219,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -238,7 +248,7 @@
    },
    "ideal": {
     "intent": "scenarios",
-    "explanation": "24% annual revenue growth, about 1.81% per month.",
+    "explanation": "Revenue growth of 24% a year.",
     "assumptions": [],
     "horizon_months": null,
     "scenarios": [
@@ -246,7 +256,7 @@
       "name": "24%/year growth",
       "overrides": {
        "revenue_base": null,
-       "revenue_growth": 0.0181,
+       "revenue_growth": null,
        "gross_margin": null,
        "opex_base": null,
        "opex_growth": null,
@@ -258,7 +268,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": 0.24,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -322,12 +334,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "opex",
         "kind": "add",
+        "timing": "monthly",
         "value": 20000,
         "start": "2026-03",
         "end": null,
@@ -352,12 +367,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "opex",
         "kind": "add",
+        "timing": "monthly",
         "value": 40000,
         "start": "2026-03",
         "end": null,
@@ -413,12 +431,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "revenue",
         "kind": "add",
+        "timing": "monthly",
         "value": -15000,
         "start": "2026-06",
         "end": null,
@@ -474,12 +495,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "opex",
         "kind": "add",
+        "timing": "monthly",
         "value": -20000,
         "start": "2026-07",
         "end": "2026-09",
@@ -535,12 +559,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "opex",
         "kind": "add",
+        "timing": "once",
         "value": 50000,
         "start": "2026-05",
         "end": "2026-05",
@@ -592,7 +619,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -645,12 +674,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "cogs",
         "kind": "pct",
+        "timing": "monthly",
         "value": 0.1,
         "start": "2026-02",
         "end": null,
@@ -714,12 +746,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "opex",
         "kind": "add",
+        "timing": "monthly",
         "value": 20000,
         "start": "2026-03",
         "end": null,
@@ -729,6 +764,7 @@
        {
         "line": "revenue",
         "kind": "pct",
+        "timing": "monthly",
         "value": 0.05,
         "start": "2026-04",
         "end": null,
@@ -857,7 +893,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -908,12 +946,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "equity",
         "kind": "add",
+        "timing": "once",
         "value": 500000,
         "start": "2026-06",
         "end": "2026-06",
@@ -979,12 +1020,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "debt",
         "kind": "add",
+        "timing": "once",
         "value": 200000,
         "start": "2026-03",
         "end": "2026-03",
@@ -994,6 +1038,7 @@
        {
         "line": "debt",
         "kind": "add",
+        "timing": "monthly",
         "value": -10000,
         "start": "2026-04",
         "end": null,
@@ -1049,12 +1094,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "capex",
         "kind": "add",
+        "timing": "once",
         "value": 80000,
         "start": "2026-04",
         "end": "2026-04",
@@ -1106,7 +1154,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -1153,7 +1203,9 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": 0.25
+       "tax_rate": 0.25,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": []
      }
@@ -1211,12 +1263,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": 0.09,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "debt",
         "kind": "add",
+        "timing": "once",
         "value": 300000,
         "start": "2026-05",
         "end": "2026-05",
@@ -1273,12 +1328,15 @@
        "depreciation_monthly": null,
        "useful_life_months": null,
        "interest_rate": null,
-       "tax_rate": null
+       "tax_rate": null,
+       "revenue_growth_annual": null,
+       "opex_growth_annual": null
       },
       "adjustments": [
        {
         "line": "capex",
         "kind": "add",
+        "timing": "once",
         "value": 90000,
         "start": "2026-03",
         "end": "2026-03",

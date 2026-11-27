@@ -23,6 +23,16 @@ def sample_data():
     return to_monthly(items), to_balances(items)
 
 
+def sample_accounts() -> dict[str, list[str]]:
+    """{category: [account names]} for the sample company, as the worker passes them."""
+    from engine import load_csv
+
+    out: dict[str, set] = {}
+    for it in load_csv(SAMPLE) + load_csv(SAMPLE_BALANCES):
+        out.setdefault(it.category.value, set()).add(it.account)
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def load_cases() -> list[dict]:
     return json.loads(EVALS.read_text())["cases"]
 
@@ -98,11 +108,11 @@ def fake_transport(replies: dict[str, str] | None = None) -> httpx.MockTransport
     return httpx.MockTransport(handler)
 
 
-def run_case(case: dict, monthly, cfg, balances=None) -> dict:
+def run_case(case: dict, monthly, cfg, balances=None, accounts=None) -> dict:
     from .interpret import interpret
 
     try:
-        interp, warnings, call = interpret(case["prompt"], monthly, cfg, balances=balances)
+        interp, warnings, call = interpret(case["prompt"], monthly, cfg, balances=balances, accounts=accounts)
         error = None
     except LLMError as e:
         interp, warnings, call, error = None, [], None, str(e)

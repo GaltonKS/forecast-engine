@@ -21,10 +21,12 @@ Month = Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YY
 class LLMOverrides(BaseModel):
     model_config = ConfigDict(extra="forbid")
     revenue_base: float | None = Field(description="Monthly revenue level; null = keep fitted")
-    revenue_growth: float | None = Field(description="MONTHLY revenue growth, 0.02 = 2%/month")
+    revenue_growth: float | None = Field(description="Only for a rate stated PER MONTH: 0.02 = 2%/month")
+    revenue_growth_annual: float | None = Field(description="A rate stated PER YEAR, exactly as stated: 0.24 = 24%/year. Not converted")
     gross_margin: float | None = Field(description="(revenue - cogs) / revenue, 0.75 = 75%")
     opex_base: float | None = Field(description="Monthly opex level")
-    opex_growth: float | None = Field(description="MONTHLY opex growth")
+    opex_growth: float | None = Field(description="Only for a rate stated PER MONTH")
+    opex_growth_annual: float | None = Field(description="A rate stated PER YEAR, exactly as stated. Not converted")
     other_net: float | None = Field(description="Monthly other income (+) / expense (-)")
     dso_days: float | None = Field(description="Days customers take to pay")
     dio_days: float | None = Field(description="Days of inventory held")
@@ -40,9 +42,13 @@ class LLMAdjustment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     line: Literal["revenue", "cogs", "opex", "other", "capex", "debt", "equity"]
     kind: Literal["add", "pct"]
-    value: float = Field(description="add: currency per month (negative to subtract); pct: 0.05 = +5%. capex/debt/equity: add only")
+    timing: Literal["once", "monthly"] = Field(
+        description="once: a single amount in one month (loan drawn, equipment bought, funding round, one-off bill). "
+        "monthly: repeats every month from start (salaries, rent, repayments, price changes)")
+    value: float = Field(description="once: the FULL amount, never divided. monthly: the amount PER MONTH. "
+                         "pct: 0.05 = +5%. capex/debt/equity: add only")
     start: Month
-    end: Month | None = Field(description="Last month it applies, inclusive; null = to the end")
+    end: Month | None = Field(description="monthly only: last month it applies, inclusive; null = to the end. Ignored for once")
     label: str = Field(max_length=120)
     useful_life_months: int | None = Field(description="capex only: how long the purchase lasts, in months; else null")
 

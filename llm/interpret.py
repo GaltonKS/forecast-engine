@@ -58,10 +58,23 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
             name, i = f"{base} ({i})", i + 1
         seen.add(name.lower())
 
-        overrides = DriverOverrides(**sc.overrides.model_dump())  # validates margin range etc.
+        raw = sc.overrides.model_dump()
+        # Annual rates are converted here, by compounding: models tend to divide by 12.
+        stated_annual = set()
+        for key in ("revenue_growth", "opex_growth"):
+            annual = raw.pop(f"{key}_annual")
+            if annual is None:
+                continue
+            if raw[key] is not None:
+                raise ValueError(f"give {key} (per month) or {key}_annual (per year), not both")
+            if annual <= -1:
+                raise ValueError(f"{key}_annual of {annual} is -100% or less")
+            raw[key] = (1 + annual) ** (1 / 12) - 1
+            stated_annual.add(key)
+        overrides = DriverOverrides(**raw)  # validates margin range etc.
         for key in ("revenue_growth", "opex_growth"):
             g = getattr(overrides, key)
-            if g is not None and abs(g) >= HIGH_MONTHLY_GROWTH:
+            if g is not None and key not in stated_annual and abs(g) >= HIGH_MONTHLY_GROWTH:
                 warnings.append(
                     f"{name}: {key} of {g:.1%} per month ({(1 + g) ** 12 - 1:.0%} per year) is unusually "
                     "high. Check it wasn't meant as an annual rate."
@@ -83,7 +96,8 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
         adjustments = []
         for a in sc.adjustments:
             start = _month(a.start)
-            end = _month(a.end) if a.end else None
+            # "once" means one month, whatever end the model wrote.
+            end = start if a.timing == "once" else (_month(a.end) if a.end else None)
             if end and end < start:
                 raise ValueError(f"adjustment '{a.label}' ends ({a.end}) before it starts ({a.start})")
             if start < ctx.forecast_start:
@@ -103,6 +117,12 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
                     f"{name}: '{a.label}' adds {a.value:,.0f} per month to {a.line}, over "
                     f"{LARGE_CHANGE_RATIO:g}x its recent monthly average ({recent:,.0f}). Check the size."
                 )
+            if (a.timing == "monthly" and end is None and a.kind == "add" and a.value > 0
+                    and a.line in ("capex", "debt", "equity")):
+                warnings.append(
+                    f"{name}: '{a.label}' adds {a.value:,.0f} of {a.line} EVERY month to the end of the forecast. "
+                    "If it's a single payment, it should be once."
+                )
             if a.line in ("capex", "debt", "equity") and not ctx.opening:
                 warnings.append(f"{name}: '{a.label}' is a cash item, but there's no balance sheet; it has no effect.")
             life = a.useful_life_months if a.line == "capex" else None
@@ -112,13 +132,21 @@ def convert(out: LLMOutput, ctx: Context, horizon_override: int | None) -> tuple
             )
         scenarios.append(Scenario(name=name, overrides=overrides, adjustments=adjustments))
 
+    # A scenario that changes nothing is the baseline, which every result
+    # already includes. All empty: the question was a baseline question.
+    intent = out.intent
+    changed = [sc for sc in scenarios if sc.adjustments or sc.overrides.model_dump(exclude_none=True)]
+    if intent == "scenarios" and not changed:
+        intent = "baseline"
+    scenarios = changed
+
     interp = Interpretation(
-        intent=out.intent,
+        intent=intent,
         explanation=out.explanation,
         assumptions=out.assumptions,
         horizon_months=horizon_override or out.horizon_months or DEFAULT_HORIZON,
         scenarios=scenarios,
-        unsupported_reason=out.unsupported_reason if out.intent == "unsupported" else None,
+        unsupported_reason=out.unsupported_reason if intent == "unsupported" else None,
     )
     return interp, warnings
 
@@ -129,8 +157,9 @@ def interpret(
     cfg: LLMConfig,
     horizon_override: int | None = None,
     balances: pd.DataFrame | None = None,
+    accounts: dict[str, list[str]] | None = None,
 ) -> tuple[Interpretation, list[str], LLMCall]:
-    ctx = build_context(monthly, balances)
+    ctx = build_context(monthly, balances, accounts)
     msgs = messages(ctx, prompt)
     schema = LLMOutput.model_json_schema()
     latency, ptok, ctok, last_error = 0.0, 0, 0, None

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from llm.client import LLMConfig  # noqa: E402
-from llm.evals import fake_transport, load_cases, run_case, sample_data  # noqa: E402
+from llm.evals import fake_transport, load_cases, run_case, sample_accounts, sample_data  # noqa: E402
 
 
 def main():
@@ -30,10 +30,11 @@ def main():
         sys.exit("Set LLM_BASE_URL and LLM_MODEL (or use --fake).")
 
     monthly, balances = sample_data()
+    accounts = sample_accounts()
     cases = [c for c in load_cases() if not args.only or c["id"] in args.only]
     results = []
     for c in cases:
-        r = run_case(c, monthly, cfg, balances)
+        r = run_case(c, monthly, cfg, balances, accounts)
         results.append(r)
         mark = "PASS" if r["passed"] else "FAIL"
         lat = f"{r['latency_seconds']:.1f}s" if r["latency_seconds"] is not None else "-"

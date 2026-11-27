@@ -445,3 +445,27 @@ def test_query_cash_items_without_balance_sheet_warn(client, tenant, fake_llm):
     upload(client, tenant, SAMPLE.read_bytes())
     res = ask(client, tenant, "What if we raise 500k from investors in June?", simulations=0)["result"]
     assert any("no balance sheet" in w for w in res["warnings"])
+
+
+def test_query_sends_the_companys_account_names_to_the_model(client, tenant, fake_llm):
+    import json as _json
+
+    import httpx
+
+    from llm.evals import load_cases
+
+    seen = []
+    ideal = {c["prompt"]: c["ideal"] for c in load_cases()}
+
+    def handler(request):
+        body = _json.loads(request.content)
+        seen.append(body["messages"][0]["content"])
+        prompt = body["messages"][-1]["content"]
+        return httpx.Response(200, json={"choices": [{"message": {"content": _json.dumps(ideal[prompt])}, "finish_reason": "stop"}]})
+
+    fake_llm(transport=httpx.MockTransport(handler))
+    upload(client, tenant, SAMPLE.read_bytes())
+    upload(client, tenant, BALANCES.read_bytes())
+    assert ask(client, tenant, "Hosting costs go up 10% from February", simulations=0)["status"] == "done"
+    assert "cogs: Hosting, Payment processing" in seen[0]
+    assert "Cash and runway questions: SUPPORTED" in seen[0]
